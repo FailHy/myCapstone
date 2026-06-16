@@ -31,6 +31,21 @@ dependencies:
   flutter:
     sdk: flutter
 
+# ======================= BY aku ============================
+  # State Management
+  provider: ^6.1.2
+  
+  # Networking
+  dio: ^5.4.3
+  
+  # Local Storage (Untuk simpan JWT Token)
+  shared_preferences: ^2.2.3
+  
+  # Camera & WebSocket (Persiapan untuk Fase 2)
+  camera: ^0.10.5+9
+  web_socket_channel: ^2.4.4
+# ===========================================================
+
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8

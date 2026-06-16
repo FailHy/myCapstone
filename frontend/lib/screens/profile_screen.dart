@@ -19,7 +19,7 @@ class ProfileScreen extends StatelessWidget {
               child: Icon(Icons.person, size: 50, color: Colors.white),
             ),
             const SizedBox(height: 16),
-            Text('Alex Fitness', style: Theme.of(context).textTheme.titleLarge),
+            Text('Alex Kucay', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 32),
 
             // User Stats
