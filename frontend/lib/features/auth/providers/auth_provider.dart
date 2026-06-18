@@ -5,26 +5,60 @@ import '../../../core/api/api_client.dart';
 
 class AuthProvider extends ChangeNotifier {
   final ApiClient _apiClient = ApiClient();
-  
+
   bool _isLoading = false;
   bool _isAuthenticated = false;
   String _errorMessage = '';
+
+  // Tambahan Variabel untuk menyimpan profil dinamis
+  String _userName = '';
+  String _userEmail = '';
 
   bool get isLoading => _isLoading;
   bool get isAuthenticated => _isAuthenticated;
   String get errorMessage => _errorMessage;
 
-  // Mengecek sesi login yang tersimpan saat aplikasi pertama kali dibuka
+  // Getter untuk UI
+  String get userName => _userName;
+  String get userEmail => _userEmail;
+
+  // Mengecek sesi login yang tersimpan
   Future<void> checkAuthStatus() async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('jwt_token');
-    
+
     if (token != null && token.isNotEmpty) {
       _isAuthenticated = true;
     } else {
       _isAuthenticated = false;
     }
     notifyListeners();
+  }
+
+  // --- LOGIKA MENGAMBIL PROFIL PENGGUNA (BARU) ---
+  Future<void> fetchProfile() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('jwt_token');
+
+      if (token == null || token.isEmpty) return;
+
+      // Memanggil endpoint /auth/me dengan menyisipkan Token di Header
+      final response = await _apiClient.dio.get(
+        '/auth/me',
+        options: Options(headers: {'Authorization': 'Bearer $token'}),
+      );
+
+      if (response.statusCode == 200) {
+        // Menyimpan data ke dalam variabel dan memperbarui UI
+        _userName = response.data['name'] ?? 'Pengguna';
+        _userEmail = response.data['email'] ?? 'Tidak ada email';
+        notifyListeners();
+      }
+    } catch (e) {
+      print('Gagal mengambil data profil: $e');
+      // Opsional: Jika backend merespons 401 (Token Kadaluarsa), Anda bisa panggil logout()
+    }
   }
 
   // Logika eksekusi Login
@@ -34,16 +68,14 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // Sesuaikan URL ini dengan endpoint auth di FastAPI Anda
-      final response = await _apiClient.dio.post('/auth/login', data: {
-        'email': email,
-        'password': password,
-      });
+      final response = await _apiClient.dio.post(
+        '/auth/login',
+        data: {'email': email, 'password': password},
+      );
 
       if (response.statusCode == 200) {
-        // Asumsi respons dari backend: {"access_token": "eyJhb..."}
         final token = response.data['access_token'];
-        
+
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('jwt_token', token);
 
@@ -53,7 +85,57 @@ class AuthProvider extends ChangeNotifier {
         return true;
       }
     } on DioException catch (e) {
-      _errorMessage = e.response?.data['detail'] ?? 'Koneksi ke server gagal.';
+      if (e.response != null && e.response?.data != null) {
+        final detail = e.response!.data['detail'];
+        if (detail is List && detail.isNotEmpty) {
+          _errorMessage = detail[0]['msg'] ?? 'Input tidak valid.';
+        } else if (detail is String) {
+          _errorMessage = detail;
+        } else {
+          _errorMessage = 'Terjadi kesalahan server.';
+        }
+      } else {
+        _errorMessage = 'Koneksi ke server gagal.';
+      }
+    } catch (e) {
+      _errorMessage = 'Terjadi kesalahan internal.';
+    }
+
+    _isLoading = false;
+    notifyListeners();
+    return false;
+  }
+
+  // Logika eksekusi Registrasi
+  Future<bool> register(String name, String email, String password) async {
+    _isLoading = true;
+    _errorMessage = '';
+    notifyListeners();
+
+    try {
+      final response = await _apiClient.dio.post(
+        '/auth/register',
+        data: {'name': name, 'email': email, 'password': password},
+      );
+
+      if (response.statusCode == 201) {
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      }
+    } on DioException catch (e) {
+      if (e.response != null && e.response?.data != null) {
+        final detail = e.response!.data['detail'];
+        if (detail is List && detail.isNotEmpty) {
+          _errorMessage = detail[0]['msg'] ?? 'Input tidak valid.';
+        } else if (detail is String) {
+          _errorMessage = detail;
+        } else {
+          _errorMessage = 'Terjadi kesalahan pada server.';
+        }
+      } else {
+        _errorMessage = 'Koneksi ke server gagal.';
+      }
     } catch (e) {
       _errorMessage = 'Terjadi kesalahan internal.';
     }
@@ -68,6 +150,11 @@ class AuthProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('jwt_token');
     _isAuthenticated = false;
+
+    // Bersihkan data profil saat logout
+    _userName = '';
+    _userEmail = '';
+
     notifyListeners();
   }
 }

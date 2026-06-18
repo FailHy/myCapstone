@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'theme.dart'; 
 import 'screens/login_screen.dart';
 import 'screens/main_navigation.dart';
+import 'screens/registration_screen.dart';
 import 'features/auth/providers/auth_provider.dart';
 
 void main() async {
@@ -11,7 +11,9 @@ void main() async {
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => AuthProvider()..checkAuthStatus()),
+        ChangeNotifierProvider(
+          create: (_) => AuthProvider()..checkAuthStatus(),
+        ),
       ],
       child: const BiTriApp(),
     ),
@@ -26,19 +28,18 @@ class BiTriApp extends StatelessWidget {
     return MaterialApp(
       title: 'BiTri AI',
       debugShowCheckedModeBanner: false,
+      // Daftarkan route untuk menghindari error
       routes: {
-        '/main': (context) => const MainNavigation(), // Pastikan import MainNavigation sudah benar
+        '/main': (context) => const MainNavigation(),
+        '/login': (context) => const LoginScreen(),
+        '/register': (context) => const RegistrationScreen(),
       },
       home: Consumer<AuthProvider>(
         builder: (context, authProvider, child) {
-          // HAPUS pengecekan isLoading di sini.
-          // Loading hanya akan muncul di dalam tombol "MASUK" saja.
-
           if (authProvider.isAuthenticated) {
-            return const MainNavigation(); 
+            return const MainNavigation();
           }
-          
-          return const LoginScreen(); 
+          return const LoginScreen();
         },
       ),
     );

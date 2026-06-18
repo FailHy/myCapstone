@@ -1,73 +1,100 @@
 import 'package:flutter/material.dart';
-import '../widgets/custom_widgets.dart';
+import 'package:provider/provider.dart';
+import 'package:frontend/features/auth/providers/auth_provider.dart';
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
   @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Otomatis mengambil data profil dari backend sesaat setelah layar dimuat
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<AuthProvider>().fetchProfile();
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          children: [
-            const SizedBox(height: 24),
-            // Avatar & Username
-            const CircleAvatar(
-              radius: 50,
-              backgroundColor: Colors.white24,
-              child: Icon(Icons.person, size: 50, color: Colors.white),
-            ),
-            const SizedBox(height: 16),
-            Text('Alex Kucay', style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 32),
-
-            // User Stats
-            const Row(
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Profil Pengguna'),
+        automaticallyImplyLeading: false,
+      ),
+      body: SafeArea(
+        // KUNCI PERBAIKAN: Gunakan Consumer agar UI bereaksi saat nama/email sudah didapatkan
+        child: Consumer<AuthProvider>(
+          builder: (context, authProvider, child) {
+            return ListView(
+              padding: const EdgeInsets.all(24.0),
               children: [
-                StatsCard(title: 'Days Trained', value: '14'),
-                SizedBox(width: 16),
-                StatsCard(title: 'Avg. Exercises', value: '3/day'),
-              ],
-            ),
-            const SizedBox(height: 32),
+                const CircleAvatar(
+                  radius: 50,
+                  backgroundColor: Colors.blueAccent,
+                  child: Icon(Icons.person, size: 50, color: Colors.white),
+                ),
+                const SizedBox(height: 16),
 
-            // History List
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                'History',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: ListView.builder(
-                itemCount: 5,
-                itemBuilder: (context, index) {
-                  return ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.white12,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(Icons.history, color: Colors.white),
+                // --- TAMPILKAN NAMA ASLI ---
+                Center(
+                  child: Text(
+                    authProvider.userName.isEmpty
+                        ? 'Memuat Profil...'
+                        : authProvider.userName,
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
                     ),
-                    title: const Text(
-                      'Biceps Training',
-                      style: TextStyle(color: Colors.white),
+                  ),
+                ),
+
+                // --- TAMPILKAN EMAIL ASLI ---
+                Center(
+                  child: Text(
+                    authProvider.userEmail.isEmpty
+                        ? '...'
+                        : authProvider.userEmail,
+                    style: const TextStyle(color: Colors.grey),
+                  ),
+                ),
+                const SizedBox(height: 32),
+                const Divider(),
+
+                ListTile(
+                  leading: const Icon(Icons.settings),
+                  title: const Text('Pengaturan Aplikasi'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {},
+                ),
+                ListTile(
+                  leading: const Icon(Icons.history),
+                  title: const Text('Riwayat Latihan'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {},
+                ),
+                const SizedBox(height: 16),
+
+                ListTile(
+                  leading: const Icon(Icons.logout, color: Colors.red),
+                  title: const Text(
+                    'Keluar',
+                    style: TextStyle(
+                      color: Colors.red,
+                      fontWeight: FontWeight.bold,
                     ),
-                    subtitle: const Text(
-                      'Yesterday • 85% Accuracy',
-                      style: TextStyle(color: Colors.white54),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
+                  ),
+                  onTap: () async {
+                    await authProvider.logout();
+                  },
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
