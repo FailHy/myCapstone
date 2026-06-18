@@ -1,0 +1,14 @@
+[
+  "rom_elbow",
+  "upper_arm_angle_std",
+  "torso_sway_range",
+  "shoulder_angle_range",
+  "rep_duration",
+  "up_phase_duration",
+  "down_phase_duration",
+  "elbow_velocity_mean",
+  "elbow_velocity_std",
+  "motion_smoothness",
+  "elbow_drift_range",
+  "mean_visibility"
+]

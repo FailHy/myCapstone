@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environment
+venv/
+.venv/
+
+# Logs
+*.log
+
+# VSCode
+.vscode/
+
+# Pytest
+.pytest_cache/
+
+# Models (opsional jika model besar)
+#*.pkl
+
+# Jupyter
+.ipynb_checkpoints/

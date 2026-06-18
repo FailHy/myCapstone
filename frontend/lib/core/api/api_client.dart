@@ -4,17 +4,14 @@ import 'package:flutter/foundation.dart';
 import 'dart:io';
 
 class ApiClient {
-  // 1. SINGLETON PATTERN: Memastikan hanya ada 1 instance Dio di memori
   static final ApiClient _instance = ApiClient._internal();
   factory ApiClient() => _instance;
-
   late final Dio dio;
 
   // ===========================================================================
-  // CONFIGURATION
-  // Pastikan IP ini sesuai dengan IPv4 (wlp2s0 / Wi-Fi) di laptop Anda.
+  // KONFIGURASI IP - Ganti sesuai network Anda
   // ===========================================================================
-  static const String physicalDeviceIP = '10.86.59.195';
+  static const String physicalDeviceIP = '10.20.27.53';
 
   static String get _baseUrl {
     if (kIsWeb) return 'http://127.0.0.1:8000';
@@ -26,13 +23,14 @@ class ApiClient {
     }
 
     if (Platform.isIOS) {
-      return 'http://$physicalDeviceIP:8000';
+      return _isSimulator()
+          ? 'http://127.0.0.1:8000'
+          : 'http://$physicalDeviceIP:8000';
     }
 
     return 'http://127.0.0.1:8000';
   }
 
-  // Helper untuk mendeteksi apakah aplikasi berjalan di Emulator Android
   static bool _isEmulator() {
     try {
       return Platform.environment['ANDROID_EMULATOR'] != null ||
@@ -42,11 +40,27 @@ class ApiClient {
     }
   }
 
-  // 2. CONSTRUCTOR PRIVATE
+  static bool _isSimulator() {
+    try {
+      return Platform.environment['SIMULATOR_DEVICE_NAME'] != null ||
+          Platform.environment['SIMULATOR_MODEL_IDENTIFIER'] != null;
+    } catch (_) {
+      return false;
+    }
+  }
+
   ApiClient._internal() {
+    final baseUrl = _baseUrl;
+
+    // LOG PENTING: Hanya tampilkan saat inisialisasi
+    if (kDebugMode) {
+      debugPrint('🚀 [API] Initialized: $baseUrl');
+      debugPrint('🚀 [API] Platform: ${Platform.operatingSystem}');
+    }
+
     dio = Dio(
       BaseOptions(
-        baseUrl: _baseUrl,
+        baseUrl: baseUrl.trim(),
         connectTimeout: const Duration(seconds: 15),
         receiveTimeout: const Duration(seconds: 15),
         sendTimeout: const Duration(seconds: 15),
@@ -54,22 +68,28 @@ class ApiClient {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
         },
+        validateStatus: (status) => status != null && status < 500,
+        followRedirects: true,
+        maxRedirects: 5,
       ),
     );
 
-    // 3. INTERCEPTORS: Middleware untuk setiap HTTP Request/Response
+    // Interceptor simpel tapi informatif
     dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {
-          if (kDebugMode) {
-            debugPrint('📡 [REQ] ${options.method} ${options.uri.path}');
-          }
+          // Sisipkan token JWT
+          try {
+            final prefs = await SharedPreferences.getInstance();
+            final token = prefs.getString('jwt_token');
+            if (token != null && token.isNotEmpty) {
+              options.headers['Authorization'] = 'Bearer $token';
+            }
+          } catch (_) {}
 
-          // Otomatis menyisipkan JWT Token (jika ada) ke setiap request
-          final prefs = await SharedPreferences.getInstance();
-          final token = prefs.getString('jwt_token');
-          if (token != null && token.isNotEmpty) {
-            options.headers['Authorization'] = 'Bearer $token';
+          // Log request (simpan untuk development)
+          if (kDebugMode) {
+            debugPrint('📡 ${options.method} ${options.uri.path}');
           }
 
           return handler.next(options);
@@ -77,15 +97,14 @@ class ApiClient {
         onResponse: (response, handler) {
           if (kDebugMode) {
             debugPrint(
-              '✅ [RES] ${response.statusCode} : ${response.requestOptions.uri.path}',
+              '✅ ${response.statusCode} ${response.requestOptions.uri.path}',
             );
           }
           return handler.next(response);
         },
-        onError: (DioException e, handler) {
+        onError: (e, handler) {
           if (kDebugMode) {
-            debugPrint('❌ [ERR] ${e.type} pada ${e.requestOptions.uri.path}');
-            _diagnoseError(e); // Panggil helper log
+            _logError(e);
           }
           return handler.next(e);
         },
@@ -93,30 +112,18 @@ class ApiClient {
     );
   }
 
-  // Helper untuk mencetak diagnosa error yang rapi
-  void _diagnoseError(DioException e) {
-    switch (e.type) {
-      case DioExceptionType.connectionTimeout:
-      case DioExceptionType.sendTimeout:
-      case DioExceptionType.receiveTimeout:
-        debugPrint(
-          '💡 DIAGNOSA: Timeout. Cek koneksi WiFi dan pastikan FastAPI berjalan.',
-        );
-        break;
-      case DioExceptionType.connectionError:
-        debugPrint(
-          '💡 DIAGNOSA: Connection Refused. Pastikan physicalDeviceIP benar & server menggunakan --host 0.0.0.0.',
-        );
-        break;
-      case DioExceptionType.badResponse:
-        debugPrint(
-          '💡 DIAGNOSA: Ditolak Server (Status ${e.response?.statusCode}). Detail: ${e.response?.data}',
-        );
-        break;
-      default:
-        debugPrint(
-          '💡 DIAGNOSA: Terjadi kesalahan jaringan lainnya (${e.message}).',
-        );
+  // Helper error logging yang rapih
+  void _logError(DioException e) {
+    final path = e.requestOptions.uri.path;
+    final statusCode = e.response?.statusCode;
+
+    debugPrint('❌ [$statusCode] $path - ${e.type.name}');
+
+    // Hanya tampilkan detail untuk error tertentu
+    if (e.type == DioExceptionType.connectionError) {
+      debugPrint('   💡 Cek: IP, Firewall, --host 0.0.0.0');
+    } else if (e.type == DioExceptionType.badResponse && e.response != null) {
+      debugPrint('   📄 ${e.response?.data}');
     }
   }
 }
