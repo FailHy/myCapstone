@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../theme.dart';
+import 'package:camera/camera.dart';
 
 class TrainingScreen extends StatefulWidget {
   const TrainingScreen({super.key});
@@ -9,134 +9,138 @@ class TrainingScreen extends StatefulWidget {
 }
 
 class _TrainingScreenState extends State<TrainingScreen> {
-  bool isTraining = false;
-  int reps = 0;
+  CameraController? _controller;
+  List<CameraDescription>? _cameras;
+  bool _isCameraInitialized = false;
 
-  // TODO: Integrate WebRTC/Camera preview here.
-  // TODO: Connect WebSocket for real-time ML pose estimation parsing.
+  @override
+  void initState() {
+    super.initState();
+    _initCamera();
+  }
+
+  // PERBAIKAN: Logika untuk membuka kamera depan
+  Future<void> _initCamera() async {
+    try {
+      _cameras = await availableCameras();
+      
+      if (_cameras != null && _cameras!.isNotEmpty) {
+        // Cari kamera depan, jika tidak ada gunakan kamera apa pun yang tersedia
+        final frontCamera = _cameras!.firstWhere(
+          (camera) => camera.lensDirection == CameraLensDirection.front,
+          orElse: () => _cameras!.first,
+        );
+
+        _controller = CameraController(
+          frontCamera,
+          ResolutionPreset.medium, // Menghemat resource CPU/RAM untuk pemrosesan ML
+          enableAudio: false,      // Matikan audio karena AI hanya butuh visual
+        );
+
+        await _controller!.initialize();
+        
+        if (!mounted) return;
+        
+        setState(() {
+          _isCameraInitialized = true;
+        });
+      }
+    } catch (e) {
+      debugPrint("Error inisialisasi kamera: $e");
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Stack(
-        children: [
-          // 1. Camera Background Layer
-          Container(
-            color: Colors.black, // Placeholder for actual Camera widget
-            child: const Center(
-              child: Text(
-                'Camera Preview Active',
-                style: TextStyle(color: Colors.white24),
-              ),
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        title: const Text('Sesi Latihan', style: TextStyle(color: Colors.white)),
+        backgroundColor: Colors.black,
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
+      body: SafeArea(
+        child: Column(
+          children: [
+            Expanded(
+              child: _isCameraInitialized && _controller != null
+                  ? Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        // Tampilan feed Kamera
+                        SizedBox(
+                          width: double.infinity,
+                          child: CameraPreview(_controller!),
+                        ),
+                        // Overlay Teks Bantuan
+                        Positioned(
+                          bottom: 20,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.black54,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: const Text(
+                              'Posisikan seluruh tubuh di dalam layar',
+                              style: TextStyle(color: Colors.white),
+                            ),
+                          ),
+                        )
+                      ],
+                    )
+                  : const Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          CircularProgressIndicator(color: Colors.blueAccent),
+                          SizedBox(height: 16),
+                          Text('Membuka Kamera...', style: TextStyle(color: Colors.white)),
+                        ],
+                      ),
+                    ),
             ),
-          ),
-
-          // 2. Alignment Guide Overlay
-          Center(
-            child: Container(
-              width: 250,
-              height: 450,
-              decoration: BoxDecoration(
-                border: Border.all(
-                  color: AppTheme.accentLime.withOpacity(0.5),
-                  width: 2,
-                  style: BorderStyle.solid,
-                ),
-                borderRadius: BorderRadius.circular(16),
-              ),
-            ),
-          ),
-
-          // 3. UI Layer (Safe Area)
-          SafeArea(
-            child: Padding(
+            // Panel Tombol Bawah
+            Container(
+              color: Colors.white,
               padding: const EdgeInsets.all(24.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  // Top Row: Instruction & Rep Counter
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Instruction Pill
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.black54,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: const Text(
-                          'Center your body',
-                          style: TextStyle(color: Colors.white),
-                        ),
-                      ),
-                      // Reps Counter
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: AppTheme.surfaceDark.withOpacity(0.9),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: AppTheme.accentLime),
-                        ),
-                        child: Column(
-                          children: [
-                            const Text(
-                              'REPS',
-                              style: TextStyle(
-                                color: Colors.white70,
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            Text(
-                              '$reps',
-                              style: const TextStyle(
-                                color: AppTheme.accentLime,
-                                fontSize: 32,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.redAccent,
+                      foregroundColor: Colors.white,
+                    ),
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.stop),
+                    label: const Text('Selesai'),
                   ),
-
-                  // Bottom Controls
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      FloatingActionButton.large(
-                        heroTag: 'control_btn',
-                        backgroundColor:
-                            isTraining ? Colors.redAccent : AppTheme.accentLime,
-                        onPressed: () {
-                          if (isTraining) {
-                            // Finish and go to results
-                            Navigator.pushReplacementNamed(context, '/result');
-                          } else {
-                            setState(() => isTraining = true);
-                            // TODO: Start ML inference stream
-                          }
-                        },
-                        child: Icon(
-                          isTraining ? Icons.stop : Icons.play_arrow,
-                          color:
-                              isTraining ? Colors.white : AppTheme.primaryNavy,
-                          size: 40,
-                        ),
-                      ),
-                    ],
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                    ),
+                    onPressed: _isCameraInitialized ? () {
+                      // TODO: Nantinya di sini kita buat koneksi ke WebSocket backend
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('AI Evaluasi akan dimulai!'))
+                      );
+                    } : null,
+                    icon: const Icon(Icons.play_arrow),
+                    label: const Text('Mulai Evaluasi'),
                   ),
                 ],
               ),
-            ),
-          ),
-        ],
+            )
+          ],
+        ),
       ),
     );
   }
