@@ -17,7 +17,7 @@ class PredictionSmoother:
         self.window = deque(maxlen=window_size)
 
     def update(self, label: str) -> str:
-        if label == "uncertain":
+        if label in ["uncertain", "calibrating"]:
             return label
         self.window.append(label)
         if not self.window:
@@ -37,58 +37,63 @@ class ExerciseEvaluatorService:
         self.buffer = RepBuffer()
         self.smoother = PredictionSmoother(window_size=3)
         self.rep_count = 0
+        
+        # HISTORY BUFFER FOR LIVE NORMALIZATION (RCA Fix)
+        self.rep_history = [] 
 
-    def _parse_raw_landmarks(self, landmarks_dict: Dict[str, Dict[str, float]]) -> ArmLandmarks:
-        """Converts raw JSON payload from Mobile/Frontend into PoseUtils objects."""
-        def to_point(key: str) -> Point2D:
-            data = landmarks_dict.get(key, {})
-            return Point2D(
-                x=float(data.get("x", 0.0)),
-                y=float(data.get("y", 0.0)),
-                visibility=float(data.get("visibility", 0.0))
-            )
-            
+    def _parse_raw_landmarks(self, landmarks_dict: Dict[str, Any]) -> ArmLandmarks:
         return ArmLandmarks(
-            shoulder=to_point("shoulder"),
-            elbow=to_point("elbow"),
-            wrist=to_point("wrist"),
-            hip=to_point("hip")
+            shoulder=Point2D(**landmarks_dict["shoulder"]),
+            elbow=Point2D(**landmarks_dict["elbow"]),
+            wrist=Point2D(**landmarks_dict["wrist"]),
+            hip=Point2D(**landmarks_dict["hip"])
         )
 
-    def process_frame(self, timestamp: float, landmarks_dict: Dict[str, Dict[str, float]]) -> Dict[str, Any]:
-        """Main entry point for incoming frame data."""
-        arm_landmarks = self._parse_raw_landmarks(landmarks_dict)
+    def process_frame(self, frame_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Process a single frame from the Flutter client.
+        frame_data schema: { "timestamp": float, "landmarks": {...}, "visibility": float }
+        """
+        timestamp = frame_data.get("timestamp", 0.0)
+        visibility = frame_data.get("visibility", 1.0)
+        raw_landmarks = frame_data.get("landmarks", {})
 
-        if not arm_visibility_ok(arm_landmarks):
-            return {"status": "tracking", "state": self.segmenter.state, "message": "low_visibility"}
+        if not raw_landmarks:
+            return {"status": "no_pose", "state": self.segmenter.state}
 
-        frame_features = compute_frame_angles(arm_landmarks)
-        event = self.segmenter.update(frame_features["elbow_angle"], timestamp)
+        if not arm_visibility_ok(visibility):
+            return {"status": "low_visibility", "state": self.segmenter.state}
 
-        # Collect data if in active movement phase
-        if event in {"started", "moving_up", "top", "up", "moving_down", "completed", "completed_partial", "down"}:
-            self.buffer.append(timestamp, frame_features)
+        try:
+            arm_lms = self._parse_raw_landmarks(raw_landmarks)
+        except Exception as e:
+            return {"status": f"invalid_landmarks: {str(e)}", "state": self.segmenter.state}
 
-        # Evaluate rep upon completion
-        if event in {"completed", "completed_partial"}:
+        angles = compute_frame_angles(arm_lms)
+        features_frame = {**angles, "mean_visibility": visibility}
+
+        self.buffer.append(timestamp, features_frame)
+        event = self.segmenter.update(angles["elbow_angle"], timestamp)
+
+        if event == "completed":
+            self.rep_count += 1
             features = extract_repetition_features(self.buffer)
-            is_valid, reason = validate_repetition_quality(self.buffer, features, self.exercise_type)
-
-            # Reset local state for next rep
-            self.buffer.clear()
-            # Equivalent to reset(keep_down=True) used in live_evaluator.py
-            self.segmenter.reset()
+            is_valid, msg = validate_repetition_quality(self.buffer, features, self.exercise_type)
 
             if not is_valid:
-                return {"status": "rejected", "reason": reason}
+                label = "invalid"
+                confidence = 1.0
+                smoothed_label = label
+            else:
+                label, confidence = self._predict(features)
+                smoothed_label = self.smoother.update(label)
 
-            # Run Inference
-            self.rep_count += 1
-            label, confidence = self._predict(features)
-            smoothed_label = self.smoother.update(label)
+            # Reset state ready for next rep
+            self.buffer.clear()
+            self.segmenter.reset(keep_down=True)
 
             return {
-                "status": "success",
+                "status": "rep_completed",
                 "rep_count": self.rep_count,
                 "prediction": label,
                 "smoothed_prediction": smoothed_label,
@@ -98,19 +103,51 @@ class ExerciseEvaluatorService:
 
         return {"status": "tracking", "state": self.segmenter.state}
 
-    def _predict(self, features: Dict[str, float]) -> Tuple[str, float]:
-        """Runs the XGBoost model natively on backend memory."""
-        # Optional: Attempt to use the hybrid gatekeeper if it exists in feature_utils
+    def _predict(self, raw_features: Dict[str, float]) -> Tuple[str, float]:
+        """Runs the XGBoost model with Live Normalization & Ratio Features."""
+        features = raw_features.copy()
+        
+        # 1. GENERATE RATIO FEATURES (RCA Fix)
+        rep_dur = features.get("rep_duration", 1e-6)
+        features["up_phase_ratio"] = features.get("up_phase_duration", 0.0) / (rep_dur + 1e-6)
+        features["down_phase_ratio"] = features.get("down_phase_duration", 0.0) / (rep_dur + 1e-6)
+
+        # 2. HYBRID GATEKEEPER (Checks absolute errors before ML)
         try:
             from ml.features.feature_utils import hybrid_gatekeeper
             allowed_to_model, rule_label, rule_feedback = hybrid_gatekeeper(features)
             if not allowed_to_model:
                 return rule_label, 1.0
         except ImportError:
-            pass # Graceful fallback if gatekeeper isn't fully implemented in utils yet
+            pass 
 
-        # Align features perfectly to model schema
-        X_live = pd.DataFrame([{col: float(features.get(col, 0.0)) for col in self.feature_columns}])
+        # 3. APPEND TO HISTORY FOR LIVE NORMALIZATION
+        self.rep_history.append(features)
+
+        # 4. CALIBRATION PHASE (Rep 1)
+        if len(self.rep_history) < 2:
+            # We don't have enough data to calculate standard deviation yet.
+            # UX: We tell the user we are calibrating their body baseline.
+            return "calibrating", 1.0
+
+        # 5. LIVE Z-SCORE NORMALIZATION (RCA Fix)
+        # Translates current raw features into Z-scores based on user's history
+        normalized_features = {}
+        df_history = pd.DataFrame(self.rep_history)
+        
+        for col in self.feature_columns:
+            if col in df_history.columns:
+                mean_val = df_history[col].mean()
+                std_val = df_history[col].std()
+                if pd.isna(std_val) or std_val == 0.0:
+                    normalized_features[col] = 0.0
+                else:
+                    normalized_features[col] = float((features[col] - mean_val) / std_val)
+            else:
+                normalized_features[col] = 0.0
+
+        # 6. INFERENCE WITH XGBOOST
+        X_live = pd.DataFrame([normalized_features])
 
         if hasattr(self.model, "predict_proba"):
             proba = self.model.predict_proba(X_live)[0]
