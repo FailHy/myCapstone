@@ -1,5 +1,5 @@
 """
-feature_utils.py — Fixed Version
+feature_utils.py — Fixed Version (with RCA Solutions)
 ==================================
 BUGS FIXED:
   #2 - Missing Functions: hybrid_gatekeeper dan feedback_from_prediction
@@ -9,6 +9,12 @@ BUGS FIXED:
        parameter keep_down (default False) untuk backward-compatibility.
   Original fix: KeyError 'avg_visibility' -> 'mean_visibility' (sudah ada
        di kode original, dipertahankan).
+
+IMPROVEMENTS (RCA Fixes):
+  #5 - Added generate_ratio_features() untuk Feature Engineering yang kebal
+       terhadap postur dasar/tempo.
+  #6 - Added normalize_features_per_subject() untuk mengatasi Subject Bias
+       (Identity Leakage) pada saat dataset processing & training.
 
 DESIGN NOTE - hybrid_gatekeeper:
   Ini adalah rule-based pre-filter sebelum masuk XGBoost. Jika kondisi
@@ -27,6 +33,8 @@ from dataclasses import dataclass
 from typing import Dict, List, Tuple
 
 import numpy as np
+import pandas as pd
+from sklearn.preprocessing import StandardScaler
 
 from tools.config import EXERCISE_CONFIG
 
@@ -384,3 +392,70 @@ def feedback_from_prediction(
         base += " (Keyakinan model sedang — pastikan kamera stabil)."
 
     return base
+
+
+# ===========================================================================
+# Advanced Feature Engineering & Normalization (RCA Solutions)
+# ===========================================================================
+
+def generate_ratio_features(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Menambahkan fitur rasio yang lebih kebal terhadap perbedaan panjang lengan subjek
+    atau tempo gerakan alami. Fitur rasio membantu memisahkan kelas dengan lebih baik.
+    
+    Digunakan terutama pada saat training (train_model.py).
+    """
+    if df.empty:
+        return df
+        
+    df_engineered = df.copy()
+    
+    # Rasio durasi up/down phase terhadap total rep duration
+    if 'up_phase_duration' in df_engineered.columns and 'rep_duration' in df_engineered.columns:
+        df_engineered['up_phase_ratio'] = df_engineered['up_phase_duration'] / (df_engineered['rep_duration'] + 1e-6)
+        
+    if 'down_phase_duration' in df_engineered.columns and 'rep_duration' in df_engineered.columns:
+        df_engineered['down_phase_ratio'] = df_engineered['down_phase_duration'] / (df_engineered['rep_duration'] + 1e-6)
+        
+    return df_engineered
+
+
+def normalize_features_per_subject(
+    df: pd.DataFrame, 
+    feature_columns: List[str], 
+    subject_column: str = 'subject_id'
+) -> pd.DataFrame:
+    """
+    Melakukan normalisasi (Z-score) pada fitur-fitur biomekanik secara independen 
+    untuk setiap subject. Ini menghilangkan bias postur/gaya alami setiap orang,
+    sehingga model belajar "penyimpangan dari normal" dan bukan "siapa orangnya".
+    
+    Digunakan terutama pada pipeline dataset preparation & training.
+    """
+    if df.empty or subject_column not in df.columns:
+        return df
+        
+    df_normalized = df.copy()
+    normalized_subjects = []
+    
+    # Loop ke semua subjek unik (S01, S02, dst)
+    for subject in df_normalized[subject_column].unique():
+        subject_mask = df_normalized[subject_column] == subject
+        subject_data = df_normalized[subject_mask].copy()
+        
+        if not subject_data.empty:
+            scaler = StandardScaler()
+            try:
+                # Terapkan StandardScaler hanya pada baris subjek ini
+                subject_data[feature_columns] = scaler.fit_transform(subject_data[feature_columns])
+            except Exception as e:
+                print(f"Warning: Gagal normalisasi subjek {subject}. Detail: {e}")
+                
+            normalized_subjects.append(subject_data)
+            
+    if not normalized_subjects:
+        return df_normalized
+        
+    # Gabungkan kembali dan urutkan index agar susunan data tidak rusak
+    df_final = pd.concat(normalized_subjects).sort_index()
+    return df_final
