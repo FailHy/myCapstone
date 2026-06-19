@@ -15,8 +15,10 @@ for d in [DATASET_DIR, MODEL_DIR, LOG_DIR, REPORT_DIR]:
     d.mkdir(parents=True, exist_ok=True)
 
 # Dataset Paths
-RAW_DATASET_PATH = DATASET_DIR / "data_training.csv"
+RAW_DATASET_PATH = DATASET_DIR / "data_backup.csv"
 CLEAN_DATASET_PATH = DATASET_DIR / "data_clean.csv"
+# conditional because my accuracy was low
+ULTRA_CLEAN_DATASET_PATH = DATASET_DIR / "data_ultra_clean.csv"
 
 # Model Artifact Paths (Biceps)
 MODEL_PKL_PATH = MODEL_DIR / "biceps_xgboost_model.pkl"
