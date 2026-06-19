@@ -10,5 +10,7 @@
   "elbow_velocity_std",
   "motion_smoothness",
   "elbow_drift_range",
-  "mean_visibility"
+  "mean_visibility",
+  "up_phase_ratio",
+  "down_phase_ratio"
 ]
