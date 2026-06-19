@@ -373,7 +373,7 @@ python -m ml.evaluation.data_eda
 
 ---
 
-## 8. EDA
+## 8. Training
 
 ```bash
 # STEP 4: Training model XGBoost
