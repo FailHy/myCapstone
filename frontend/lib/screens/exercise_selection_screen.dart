@@ -2,15 +2,15 @@ import 'package:flutter/material.dart';
 import '../core/models/exercise_type.dart';
 import 'training_setup_screen.dart';
 
-class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key});
+class ExerciseSelectionScreen extends StatelessWidget {
+  const ExerciseSelectionScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('BiTri AI'),
-        automaticallyImplyLeading: false, // Menghilangkan tombol back bawaan
+        title: const Text('Pilih Latihan'),
+        automaticallyImplyLeading: false,
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -18,16 +18,17 @@ class HomeScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Halo, Pengguna!',
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+              const Text(
+                'Katalog Latihan',
+                style: TextStyle(
+                  fontSize: 28,
                   fontWeight: FontWeight.bold,
                 ),
               ),
               const SizedBox(height: 8),
               const Text('Pilih rutinitas latihan Anda hari ini:'),
               const SizedBox(height: 32),
-
+              
               _buildExerciseCard(
                 context,
                 title: ExerciseType.biceps.displayName,
@@ -37,12 +38,12 @@ class HomeScreen extends StatelessWidget {
                 colors: [Colors.blueAccent, Colors.lightBlue],
               ),
               const SizedBox(height: 20),
-
+              
               _buildExerciseCard(
                 context,
                 title: ExerciseType.triceps.displayName,
                 subtitle: 'Fokus pada otot lengan belakang',
-                icon: Icons.sports_gymnastics_rounded,
+                icon: Icons.sports_gymnastics,
                 type: ExerciseType.triceps,
                 colors: [Colors.indigo, Colors.deepPurple],
               ),
@@ -63,7 +64,9 @@ class HomeScreen extends StatelessWidget {
   }) {
     return Card(
       elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
       child: InkWell(
         onTap: () {
           Navigator.push(
@@ -99,7 +102,10 @@ class HomeScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 8),
-              Text(subtitle, style: const TextStyle(color: Colors.white70)),
+              Text(
+                subtitle,
+                style: const TextStyle(color: Colors.white70),
+              ),
               const SizedBox(height: 24),
               const Row(
                 children: [
@@ -112,13 +118,9 @@ class HomeScreen extends StatelessWidget {
                     ),
                   ),
                   SizedBox(width: 8),
-                  Icon(
-                    Icons.arrow_forward_rounded,
-                    color: Colors.white,
-                    size: 20,
-                  ),
+                  Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 20),
                 ],
-              ),
+              )
             ],
           ),
         ),

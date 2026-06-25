@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'home_screen.dart';
-import 'training_screen.dart';
+import 'exercise_selection_screen.dart';
 import 'profile_screen.dart';
 
 class MainNavigation extends StatefulWidget {
@@ -14,9 +14,10 @@ class _MainNavigationState extends State<MainNavigation> {
   int _selectedIndex = 0;
 
   // PERBAIKAN: Memasukkan ketiga laman ke dalam urutan Bottom Menu
+  // Menambahkan parameter wajib exerciseType pada TrainingScreen
   final List<Widget> _screens = [
     const HomeScreen(),
-    const TrainingScreen(),
+    const ExerciseSelectionScreen(), // <-- PERBAIKAN DI SINI
     const ProfileScreen(),
   ];
 

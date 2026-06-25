@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:frontend/features/auth/providers/auth_provider.dart';
+import 'history_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -75,7 +76,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   leading: const Icon(Icons.history),
                   title: const Text('Riwayat Latihan'),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: () {},
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const HistoryScreen()),
+                    );
+                  },
                 ),
                 const SizedBox(height: 16),
 
