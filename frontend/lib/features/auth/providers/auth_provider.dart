@@ -10,25 +10,29 @@ class AuthProvider extends ChangeNotifier {
   bool _isAuthenticated = false;
   String _errorMessage = '';
 
-  // Tambahan Variabel untuk menyimpan profil dinamis
-  String _userName = '';
+  // Variabel untuk menyimpan profil dinamis
+  String _userName  = '';
   String _userEmail = '';
+  String _userId    = ''; // Ditambahkan: ID user dari database
 
-  bool get isLoading => _isLoading;
+  bool get isLoading       => _isLoading;
   bool get isAuthenticated => _isAuthenticated;
-  String get errorMessage => _errorMessage;
+  String get errorMessage  => _errorMessage;
 
-  // Getter untuk UI
-  String get userName => _userName;
+  // Getter untuk UI & service lain
+  String get userName  => _userName;
   String get userEmail => _userEmail;
+  String get userId    => _userId; // Getter baru
 
   // Mengecek sesi login yang tersimpan
   Future<void> checkAuthStatus() async {
     final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('jwt_token');
+    final token  = prefs.getString('jwt_token');
+    final savedId = prefs.getString('user_id') ?? '';
 
     if (token != null && token.isNotEmpty) {
       _isAuthenticated = true;
+      _userId = savedId; // Pulihkan userId dari penyimpanan lokal
     } else {
       _isAuthenticated = false;
     }
@@ -50,9 +54,17 @@ class AuthProvider extends ChangeNotifier {
       );
 
       if (response.statusCode == 200) {
-        // Menyimpan data ke dalam variabel dan memperbarui UI
-        _userName = response.data['name'] ?? 'Pengguna';
-        _userEmail = response.data['email'] ?? 'Tidak ada email';
+        // Simpan profil + userId ke state
+        _userName  = response.data['name']  ?? 'Pengguna';
+        _userEmail = response.data['email'] ?? '';
+        // Backend mengembalikan 'id' atau 'user_id' — sesuaikan jika berbeda
+        _userId    = response.data['id']?.toString() ??
+                     response.data['user_id']?.toString() ?? '';
+
+        // Simpan userId ke SharedPreferences agar tersedia setelah restart
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('user_id', _userId);
+
         notifyListeners();
       }
     } catch (e) {
@@ -82,6 +94,9 @@ class AuthProvider extends ChangeNotifier {
         _isAuthenticated = true;
         _isLoading = false;
         notifyListeners();
+
+        // Fetch profil segera agar userId tersedia sebelum training
+        await fetchProfile();
         return true;
       }
     } on DioException catch (e) {
@@ -149,11 +164,13 @@ class AuthProvider extends ChangeNotifier {
   Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('jwt_token');
+    await prefs.remove('user_id'); // Bersihkan userId juga
     _isAuthenticated = false;
 
-    // Bersihkan data profil saat logout
-    _userName = '';
+    // Bersihkan semua data profil
+    _userName  = '';
     _userEmail = '';
+    _userId    = '';
 
     notifyListeners();
   }

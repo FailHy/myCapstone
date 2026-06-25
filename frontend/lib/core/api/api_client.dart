@@ -11,7 +11,7 @@ class ApiClient {
   // ===========================================================================
   // KONFIGURASI IP - Ganti sesuai network Anda
   // ===========================================================================
-  static const String physicalDeviceIP = '10.20.27.53';
+  static const String physicalDeviceIP = '10.93.254.195';
 
   static String get _baseUrl {
     if (kIsWeb) return 'http://127.0.0.1:8000';
@@ -121,7 +121,7 @@ class ApiClient {
 
     // Hanya tampilkan detail untuk error tertentu
     if (e.type == DioExceptionType.connectionError) {
-      debugPrint('   💡 Cek: IP, Firewall, --host 0.0.0.0');
+      debugPrint('   💡 Cek: IP, pada api_clien dan training_service');
     } else if (e.type == DioExceptionType.badResponse && e.response != null) {
       debugPrint('   📄 ${e.response?.data}');
     }
