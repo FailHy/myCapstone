@@ -1,3 +1,4 @@
+import asyncio
 import time
 import sys
 from pathlib import Path
@@ -11,21 +12,22 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from backend.services.session_manager import SessionManager
 
-def main():
+async def main():
     print("--- 1. Initializing System Engine ---")
     try:
         session_manager = SessionManager()
     except Exception as e:
         print(f"Failed to load models (Did you run train_model.py first?): {e}")
         return
-        
+
     print("\n--- 2. Starting Mobile App Session ---")
-    session_id = session_manager.create_session(user_id="user_123", exercise_type="biceps")
+    # FIX CRITICAL-03: create_session dan get_session adalah async, harus di-await
+    session_id = await session_manager.create_session(user_id="user_123", exercise_type="biceps")
     print(f"Session Created: {session_id}")
-    
+
     # Retrieve the stateful service for this session
-    evaluator = session_manager.get_session(session_id)
-    
+    evaluator = await session_manager.get_session(session_id)
+
     print("\n--- 3. Simulating WebSocket Stream ---")
     
     # Mock sequence: Arm goes from straight (140 deg) -> curled (60 deg) -> straight (140 deg)
@@ -59,7 +61,7 @@ def main():
         
         print(f"Frame {i:02d} | Status: {result['status']:<10} | State: {result.get('state', '')}")
         
-        if result['status'] == 'success':
+        if result['status'] == 'rep_completed':  # FIX: status yang benar adalah 'rep_completed'
              print(f"\n🔥 REP COMPLETE! Rep Count: {result['rep_count']}")
              print(f"🤖 ML Evaluation: {result['prediction']} (Smoothed: {result['smoothed_prediction']})")
              print(f"📈 Confidence: {result['confidence']:.2f}\n")
@@ -67,8 +69,8 @@ def main():
         time.sleep(0.05) # Just for terminal readability
         
     print("\n--- 4. Ending Session ---")
-    stats = session_manager.delete_session(session_id)
+    stats = await session_manager.delete_session(session_id)  # FIX: delete_session juga async
     print(f"Workout Stats: {stats}")
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())  # FIX CRITICAL-03: jalankan coroutine main() dengan asyncio.run()

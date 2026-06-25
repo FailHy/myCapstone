@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import time
 import uuid
+from collections import Counter
 from typing import Any, Dict, Optional
 
 from .model_loader import ModelLoader
@@ -18,8 +19,13 @@ class SessionManager:
         # Dict utama: session_id -> ExerciseEvaluatorService
         self._sessions: Dict[str, ExerciseEvaluatorService] = {}
 
+        # Dict user_id per sesi
+        self._user_ids: Dict[str, str] = {}
+
+        # Dict db_session_id (int row ID di tabel training_sessions) per sesi
+        self._db_session_ids: Dict[str, Optional[int]] = {}
+
         # Dict timestamp last-touch: session_id -> float (epoch)
-        # Dipisah dari _sessions agar tidak mencemari service object.
         self._last_activity: Dict[str, float] = {}
 
         # Lock tunggal untuk semua operasi ke _sessions dan _last_activity.
@@ -43,26 +49,34 @@ class SessionManager:
         Raises:
             ValueError: jika exercise_type tidak dikenali model loader.
         """
-        # ModelLoader.get_artifacts bisa raise ValueError — biarkan naik ke
-        # caller (main.py akan tangkap dan return HTTP 400).
-        model, label_encoder, feature_columns = self.model_loader.get_artifacts(
+        # ModelLoader.get_artifacts returns (model, label_encoder, feature_columns, scaler)
+        model, label_encoder, feature_columns, scaler = self.model_loader.get_artifacts(
             exercise_type
         )
 
         service = ExerciseEvaluatorService(
-            exercise_type=exercise_type,
-            model=model,
-            label_encoder=label_encoder,
-            feature_columns=feature_columns,
+            exercise_type  = exercise_type,
+            model          = model,
+            label_encoder  = label_encoder,
+            feature_columns= feature_columns,
+            scaler         = scaler,
         )
 
         session_id = str(uuid.uuid4())
 
         async with self._lock:
-            self._sessions[session_id] = service
+            self._sessions[session_id]      = service
+            self._user_ids[session_id]      = user_id
+            self._db_session_ids[session_id] = None  # set later via set_db_session_id
             self._last_activity[session_id] = time.monotonic()
 
         return session_id
+
+    async def set_db_session_id(self, session_id: str, db_session_id: int) -> None:
+        """Simpan mapping UUID session -> DB row ID (dipanggil setelah INSERT di /session/start)."""
+        async with self._lock:
+            if session_id in self._db_session_ids:
+                self._db_session_ids[session_id] = db_session_id
 
     async def get_session(self, session_id: str) -> ExerciseEvaluatorService:
         """
@@ -92,14 +106,29 @@ class SessionManager:
         Dipanggil dari REST endpoint /session/end.
         """
         async with self._lock:
-            service = self._sessions.pop(session_id, None)
+            service       = self._sessions.pop(session_id, None)
+            user_id       = self._user_ids.pop(session_id, "")
+            db_session_id = self._db_session_ids.pop(session_id, None)
             self._last_activity.pop(session_id, None)
 
         if service is not None:
+            accuracy = (
+                round(service.correct_reps / service.rep_count * 100, 1)
+                if service.rep_count > 0 else 0.0
+            )
+            distribution = dict(Counter(service.predictions))
+            distribution.pop('correct', None)
+            distribution.pop('uncertain', None)
+
             return {
-                "status": "session_ended",
-                "total_reps": service.rep_count,
-                "exercise_type": service.exercise_type,
+                "status":             "session_ended",
+                "total_reps":         service.rep_count,
+                "correct_reps":       service.correct_reps,
+                "accuracy":           accuracy,
+                "exercise_type":      service.exercise_type,
+                "user_id":            user_id,
+                "db_session_id":      db_session_id,
+                "error_distribution": distribution,
             }
         return {"status": "error", "message": "not_found"}
 
@@ -130,6 +159,8 @@ class SessionManager:
         async with self._lock:
             count = len(self._sessions)
             self._sessions.clear()
+            self._user_ids.clear()
+            self._db_session_ids.clear()
             self._last_activity.clear()
 
         if count:
@@ -151,6 +182,8 @@ class SessionManager:
 
             for sid in expired:
                 self._sessions.pop(sid, None)
+                self._user_ids.pop(sid, None)
+                self._db_session_ids.pop(sid, None)
                 self._last_activity.pop(sid, None)
 
         if expired:

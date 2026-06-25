@@ -45,7 +45,20 @@ class PredictResponse(BaseModel):
 class SessionEndResponse(BaseModel):
     status: str
     total_reps: int
+    correct_reps: int = 0
+    accuracy: float = 0.0
     exercise_type: str
+    error_distribution: Optional[Dict[str, int]] = None
+
+class HistoryItem(BaseModel):
+    id: int
+    exercise_type: str
+    total_reps: int
+    correct_reps: int
+    accuracy: float
+    created_at: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
     
 # Schema untuk Request: POST /auth/register
 class UserCreate(BaseModel):
