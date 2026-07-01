@@ -1,48 +1,22 @@
 """
 evaluator_service.py
 =====================
-FIX SUMMARY (vs versi sebelumnya):
+ARSITEKTUR NORMALISASI (Post-Fix):
 
-1. [BUG UTAMA DIHAPUS] Live session-relative Z-score normalization dihapus
-   total. Versi sebelumnya menghitung Z-score rom_elbow (dan fitur lain)
-   terhadap rep_history milik sesi live yang sedang berjalan -- termasuk
-   rep yang baru saja diprediksi salah (not_full_up, body_swing, dst).
-   Akibatnya baseline tercemar oleh urutan rep, dan rep 'correct' yang
-   datang setelah beberapa rep buruk bisa mendapat Z-score negatif palsu
-   meski ROM-nya secara absolut normal. Model TIDAK pernah dilatih dengan
-   skema normalisasi sesi-relatif semacam ini, jadi ini murni train/serve
-   skew di level fitur, bukan masalah kualitas model.
+  Training  : raw features → StandardScaler.fit_transform() per fold
+               Final model : StandardScaler.fit_transform() pada 100% data
+               Scaler disimpan sebagai scaler_{exercise}.pkl
 
-   -> Fitur sekarang dikirim ke model dalam skala ABSOLUT, identik dengan
-      apa yang dipakai saat training (lihat clean_dataset.py / FEATURE_COLUMNS).
+  Serving   : raw features → scaler.transform() (scaler yang SAMA)
+               → model.predict_proba()
 
-2. [DIHAPUS] State "calibrating" dan rep_history terkait Z-score di atas
-   ikut dihapus karena tidak lagi diperlukan. Rep pertama sekarang langsung
-   dinilai, bukan di-skip.
+  Invariant : scaler yang dipakai serving == scaler yang dipakai saat model
+               dilatih. Train/serve skew = 0.
 
-3. [DIPERTAHANKAN] up_phase_ratio / down_phase_ratio tetap dihitung karena
-   bisa jadi fitur yang valid -- TAPI lihat catatan ASUMSI di bawah ini.
-   Anda WAJIB verifikasi dua hal sebelum deploy:
-     a) Apakah 'up_phase_ratio' dan 'down_phase_ratio' benar-benar ada di
-        self.feature_columns (yaitu di tools/config.py FEATURE_COLUMNS)?
-     b) Apakah kolom itu dihitung dengan rumus yang SAMA PERSIS saat
-        training/clean_dataset.py? Kalau training tidak punya kolom ini
-        sama sekali, HAPUS blok ini -- mengirim kolom ekstra yang tidak
-        dikenal model tidak akan menyebabkan crash (karena ada filtering
-        ke self.feature_columns), tapi tetap baca catatan di bagian akhir
-        file ini.
-
-4. [DIPERTAHANKAN] hybrid_gatekeeper tetap dipanggil sebelum inferensi ML,
-   sesuai desain awal Anda (rule-based check untuk error absolut sebelum
-   model dipanggil).
-
-5. [TIDAK DIUBAH, PERLU VERIFIKASI TERPISAH] RepetitionSegmenter.reset(
-   keep_down=True) dipertahankan apa adanya karena sudah ada di kode
-   Anda sebelumnya dan tidak terkait langsung dengan bug Z-score ini.
-   Saya TIDAK punya source RepetitionSegmenter, jadi saya tidak bisa
-   memverifikasi bahwa reset(keep_down=True) di sini benar-benar
-   ekuivalen dengan apa yang dipakai di collect_data.py (yang memakai
-   .reset() tanpa argumen). Ini tetap PR terbuka -- lihat catatan akhir.
+Catatan lain yang DIPERTAHANKAN:
+  - hybrid_gatekeeper tetap dipanggil sebelum inferensi ML (rule-based safety).
+  - PredictionSmoother (majority vote 3 rep) tetap aktif.
+  - rep_results dikumpulkan untuk batch INSERT di /session/end.
 """
 
 import pandas as pd
@@ -98,6 +72,9 @@ class ExerciseEvaluatorService:
         self.rep_count    = 0
         self.correct_reps = 0
         self.predictions: list = []
+        # STEP 4: kumpulkan data per-rep untuk batch INSERT di /session/end
+        # Tidak mengubah ML pipeline — hanya menyalin data yang sudah ada
+        self.rep_results: list = []
 
     def _parse_raw_landmarks(self, landmarks_dict: Dict[str, Any]) -> ArmLandmarks:
         return ArmLandmarks(
@@ -160,14 +137,27 @@ class ExerciseEvaluatorService:
                 except Exception:
                     feedback_text = smoothed_label
 
-            # Track predictions
+            # Track predictions (sudah ada sebelumnya — jangan ubah)
             self.predictions.append(smoothed_label)
             if smoothed_label == "correct":
                 self.correct_reps += 1
 
-            # Reset state ready for next rep
+            # STEP 4: simpan snapshot per-rep untuk batch INSERT nanti
+            # Data ini sudah tersedia — tidak ada kalkulasi baru
+            self.rep_results.append({
+                "rep_number":         self.rep_count,
+                "prediction":         label,
+                "smoothed_prediction": smoothed_label,
+                "confidence":         confidence,
+                "feedback_text":      feedback_text,
+                "features":           features,
+            })
+
+            # Reset state untuk repetisi berikutnya.
+            # keep_down=False agar state kembali ke 'idle', konsisten dengan
+            # collect_data.py (training) yang memanggil segmenter.reset() tanpa argumen.
             self.buffer.clear()
-            self.segmenter.reset(keep_down=True)
+            self.segmenter.reset(keep_down=False)
 
             running_accuracy = (
                 round(self.correct_reps / self.rep_count * 100, 1)
@@ -213,10 +203,10 @@ class ExerciseEvaluatorService:
             [{col: float(features.get(col, 0.0)) for col in self.feature_columns}]
         )
 
-        # === CRITICAL FIX: TERAPKAN POPULATION NORMALIZATION ===
-        # Model dilatih dengan subject-normalized data (Z-score per subject).
-        # Saat serving, kita approximasikan dengan population scaler (global Z-score)
-        # yang di-fit dari seluruh training set.
+        # === TERAPKAN SCALER (IDENTIK DENGAN TRAINING) ===
+        # Scaler di-fit saat training pada 100% training data dan disimpan
+        # sebagai scaler_{exercise}.pkl. Dengan menerapkan transform yang sama
+        # di sini, distribusi fitur serving == distribusi fitur training.
         if self.scaler is not None:
             try:
                 X_live = pd.DataFrame(
@@ -255,28 +245,18 @@ class ExerciseEvaluatorService:
 
 
 # ----------------------------------------------------------------------
-# CATATAN AKHIR -- HAL YANG SAYA TIDAK BISA VERIFIKASI DARI SINI
+# INVARIANT YANG BERLAKU SETELAH FIX INI
 # ----------------------------------------------------------------------
-# 1. self.feature_columns datang dari ModelLoader.get_artifacts() yang
-#    sumbernya tidak saya lihat. Sebelum deploy, print isi
-#    self.feature_columns sekali di __init__ dan bandingkan manual dengan
-#    FEATURE_COLUMNS di tools/config.py / kolom yang benar-benar dipakai
-#    XGBoost saat model.fit(). Kalau ada mismatch nama kolom (mis. training
-#    pakai 'rom_elbow' tapi feature_columns berisi nama lain), prediksi
-#    akan tetap "jalan" tanpa error tapi dengan nilai 0.0 yang salah --
-#    ini silent failure paling berbahaya, tidak akan kelihatan dari log
-#    error biasa.
+# 1. Train/serve scaler konsisten:
+#    scaler_{exercise}.pkl di-fit oleh train_model.py pada raw training
+#    data (100% data), dan transform yang SAMA diterapkan di sini.
+#    Tidak ada script lain yang boleh membuat atau mengganti file ini.
 #
-# 2. RepetitionSegmenter.reset(keep_down=True) di live vs collect_data.py
-#    yang memakai .reset() tanpa argumen -- saya tidak punya source
-#    RepetitionSegmenter untuk memastikan keduanya menghasilkan state awal
-#    yang identik. Ini tetap area yang perlu diverifikasi terpisah, di
-#    luar fix Z-score ini.
+# 2. Segmenter reset konsisten:
+#    reset(keep_down=False) sesuai dengan collect_data.py (training).
 #
-# 3. Sebelum retrain model apapun: jalankan dulu kode ini apa adanya
-#    terhadap model yang SUDAH ADA (akurasi offline 92%). Karena bug-nya
-#    ada di serving (skala fitur), model yang sudah dilatih kemungkinan
-#    besar sudah cukup baik begitu pipeline ini diperbaiki -- retrain
-#    baru perlu dipertimbangkan SETELAH Anda konfirmasi fix ini tidak
-#    cukup menyelesaikan masalah live evaluator.
+# 3. feature_columns konsisten:
+#    Kolom dan urutan dari feature_columns_{exercise}.json == kolom
+#    yang dipakai saat model.fit() == kolom yang disimpan di scaler pkl.
+#    Verifikasi: scaler_data["feature_columns"] == feature_columns_*.json
 # ----------------------------------------------------------------------

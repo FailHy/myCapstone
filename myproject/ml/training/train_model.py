@@ -22,7 +22,7 @@ from sklearn.metrics import (
 )
 # Ganti GroupShuffleSplit dengan LeaveOneGroupOut untuk evaluasi yang lebih kuat
 from sklearn.model_selection import LeaveOneGroupOut, train_test_split
-from sklearn.preprocessing import LabelEncoder
+from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.utils.class_weight import compute_sample_weight
 
 # Mengambil konfigurasi path dari config.py
@@ -38,10 +38,9 @@ from tools.config import (
     LABEL_ENCODER_PATH,
 )
 
-# Import fungsi RCA fixes dari feature_utils
+# Import fungsi feature engineering dari feature_utils
 from ml.features.feature_utils import (
     generate_ratio_features,
-    normalize_features_per_subject
 )
 
 # -----------------------------------------------------------------------------
@@ -142,36 +141,34 @@ def train_single_model(df_filtered: pd.DataFrame, exercise_name: str, args: argp
     print(f"\n{'='*60}")
     print(f" 🚀 MEMULAI PELATIHAN MODEL: {exercise_name.upper()}")
     print(f"{'='*60}")
-    
+
     target_col = "error_type"
-    
+
     # 1. Feature Engineering
     df_engineered = generate_ratio_features(df_filtered)
-    
+
     # Gabungkan fitur asli dengan fitur baru yang mungkin dibuat
     all_possible_features = FEATURE_COLUMNS + ['up_phase_ratio', 'down_phase_ratio']
     features = [col for col in all_possible_features if col in df_engineered.columns]
-    
+
     # Drop NAs
     df_engineered = df_engineered.dropna(subset=[target_col] + features).reset_index(drop=True)
     if len(df_engineered) < 20:
-        print(f"⚠️ Melewati {exercise_name.upper()} karena datanya organik barunya terlalu sedikit ({len(df_engineered)} baris).")
+        print(f"⚠️ Melewati {exercise_name.upper()} karena datanya terlalu sedikit ({len(df_engineered)} baris).")
         return
-        
-    # 2. Subject Normalization (Mencegah Identity Leakage)
-    print("   -> Menerapkan Subject-Level Normalization...")
-    df_normalized = normalize_features_per_subject(df_engineered, features, subject_column='subject_id')
 
-    X = df_normalized[features].astype(float)
+    # 2. Siapkan X dan y dari data mentah (belum di-scale)
+    #    StandardScaler akan di-fit DI DALAM loop CV untuk mencegah leakage.
+    X = df_engineered[features].astype(float)
 
     label_encoder = LabelEncoder()
-    y = label_encoder.fit_transform(df_normalized[target_col].astype(str))
+    y = label_encoder.fit_transform(df_engineered[target_col].astype(str))
     label_names = list(label_encoder.classes_)
     num_classes = len(label_names)
-    
+
     # Gunakan subject_id untuk grouping CV
-    if "subject_id" in df_normalized.columns and len(df_normalized["subject_id"].unique()) > 1:
-        groups = df_normalized["subject_id"].values
+    if "subject_id" in df_engineered.columns and len(df_engineered["subject_id"].unique()) > 1:
+        groups = df_engineered["subject_id"].values
         logo = LeaveOneGroupOut()
         splits = list(logo.split(X, y, groups))
         print(f"   -> Menggunakan Leave-One-Group-Out CV ({len(splits)} Folds / Subjects)")
@@ -186,29 +183,39 @@ def train_single_model(df_filtered: pd.DataFrame, exercise_name: str, args: argp
     # Array untuk menyimpan seluruh prediksi Out-Of-Fold
     y_true_all = []
     y_pred_all = []
-    
+
     # 3. Cross Validation Loop
+    #    PENTING: StandardScaler di-fit HANYA pada data training setiap fold
+    #    agar tidak terjadi data leakage dari test fold ke scaler.
     for fold, (train_idx, test_idx) in enumerate(splits):
-        X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
+        X_train_raw, X_test_raw = X.iloc[train_idx], X.iloc[test_idx]
         y_train, y_test = y[train_idx], y[test_idx]
-        
-        # Hitung class weights untuk fold ini (Membantu kelas 'correct' yang recall-nya rendah)
-        sample_weights = compute_sample_weight(class_weight='balanced', y=y_train)
-        
-        model_fold = make_model(num_classes=num_classes, random_state=args.random_state)
-        
-        # Fit model per fold (Tanpa eval_set agar tidak membingungkan log, 
-        # kita hanya butuh final fold untuk plot learning curve jika mau)
-        model_fold.fit(
-            X_train, y_train, 
-            sample_weight=sample_weights,
-            verbose=False
+
+        # Fit scaler hanya pada training fold, transform keduanya
+        fold_scaler = StandardScaler()
+        X_train_scaled = pd.DataFrame(
+            fold_scaler.fit_transform(X_train_raw),
+            columns=features,
         )
-        
-        preds = model_fold.predict(X_test)
+        X_test_scaled = pd.DataFrame(
+            fold_scaler.transform(X_test_raw),
+            columns=features,
+        )
+
+        # Hitung class weights untuk fold ini
+        sample_weights = compute_sample_weight(class_weight='balanced', y=y_train)
+
+        model_fold = make_model(num_classes=num_classes, random_state=args.random_state)
+        model_fold.fit(
+            X_train_scaled, y_train,
+            sample_weight=sample_weights,
+            verbose=False,
+        )
+
+        preds = model_fold.predict(X_test_scaled)
         y_true_all.extend(y_test)
         y_pred_all.extend(preds)
-        
+
         if groups is not None:
             test_subject = groups[test_idx][0]
             print(f"      Fold {fold+1} | Test Subject: {test_subject} | Acc: {accuracy_score(y_test, preds)*100:.1f}%")
@@ -219,46 +226,67 @@ def train_single_model(df_filtered: pd.DataFrame, exercise_name: str, args: argp
     bal_acc = balanced_accuracy_score(y_true_all, y_pred_all) * 100
     print(f"   - Akurasi (Accuracy) : {acc:.2f}%")
     print(f"   - Akurasi (Balanced) : {bal_acc:.2f}%\n")
-    
+
     all_labels = list(range(num_classes))
-    print(classification_report(y_true_all, y_pred_all, labels=all_labels, target_names=label_names, zero_division=0))
-    
+    print(classification_report(
+        y_true_all, y_pred_all,
+        labels=all_labels, target_names=label_names, zero_division=0,
+    ))
+
     save_confusion_matrix(y_true_all, y_pred_all, label_names, exercise_name, REPORT_DIR)
 
-    # 5. Latih Final Model pada 100% Data dengan Class Weights
-    print("   -> Melatih model final pada 100% data...")
+    # 5. Latih Final Model pada 100% Data
+    #    Fit scaler baru pada SEMUA data training — ini yang akan disimpan
+    #    dan dipakai saat serving sehingga skala train == serving.
+    print("   -> Melatih scaler & model final pada 100% data...")
+    final_scaler = StandardScaler()
+    X_scaled_all = pd.DataFrame(
+        final_scaler.fit_transform(X),
+        columns=features,
+    )
+
     final_model = make_model(num_classes=num_classes, random_state=args.random_state)
     final_weights = compute_sample_weight(class_weight='balanced', y=y)
-    
-    # Untuk learning curve, split sedikit saja sebagai dummy eval_set (misal 10%)
-    X_train_f, X_val_f, y_train_f, y_val_f, w_train_f, w_val_f = train_test_split(
-        X, y, final_weights, test_size=0.1, random_state=args.random_state, stratify=y
+
+    # Dummy eval_set untuk learning curve (10% dari data yang sudah di-scale)
+    X_train_f, X_val_f, y_train_f, y_val_f, w_train_f, _ = train_test_split(
+        X_scaled_all, y, final_weights,
+        test_size=0.1, random_state=args.random_state, stratify=y,
     )
-    
+
     eval_set_final = [(X_train_f, y_train_f), (X_val_f, y_val_f)]
     final_model.fit(
-        X_train_f, y_train_f, 
-        eval_set=eval_set_final, 
+        X_train_f, y_train_f,
+        eval_set=eval_set_final,
         sample_weight=w_train_f,
-        verbose=False
+        verbose=False,
     )
-    
+
     save_learning_curve(final_model.evals_result(), exercise_name, REPORT_DIR)
 
     # 6. Simpan Model & Artefak
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
-    
+
+    # Model
     final_model.save_model(str(MODEL_DIR / f"xgboost_{exercise_name}_model.json"))
-    with (MODEL_DIR / f"{exercise_name}_xgboost_model.pkl").open("wb") as f: 
+    with (MODEL_DIR / f"{exercise_name}_xgboost_model.pkl").open("wb") as f:
         pickle.dump(final_model, f)
-        
-    with LABEL_ENCODER_PATH.open("wb") as f: 
+
+    # Label encoder
+    with LABEL_ENCODER_PATH.open("wb") as f:
         pickle.dump(label_encoder, f)
-        
-    with (MODEL_DIR / f"feature_columns_{exercise_name}.json").open("w") as f: 
+
+    # Feature columns
+    with (MODEL_DIR / f"feature_columns_{exercise_name}.json").open("w") as f:
         json.dump(features, f, indent=2)
 
-    print(f"✅ Selesai! Model {exercise_name.upper()} berhasil dilatih dan disimpan.")
+    # Scaler — WAJIB disimpan agar serving menggunakan transformasi yang IDENTIK
+    # dengan yang dipakai saat training. Tidak boleh di-fit ulang di luar sini.
+    scaler_path = MODEL_DIR / f"scaler_{exercise_name}.pkl"
+    with scaler_path.open("wb") as f:
+        pickle.dump({"scaler": final_scaler, "feature_columns": features}, f)
+
+    print(f"✅ Selesai! Model, scaler, dan artefak {exercise_name.upper()} berhasil disimpan.")
 
 
 def train_all_models(args: argparse.Namespace) -> None:
