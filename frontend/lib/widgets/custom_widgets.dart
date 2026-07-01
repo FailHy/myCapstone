@@ -1,135 +1,130 @@
+// Path: lib/widgets/custom_widgets.dart
 import 'package:flutter/material.dart';
 import '../theme.dart';
 
-// --- REUSABLE BUTTON ---
 class PrimaryButton extends StatelessWidget {
   final String text;
   final VoidCallback onPressed;
-  final bool isFullWidth;
+  final IconData? icon;
+  final Color? color;
 
   const PrimaryButton({
     super.key,
     required this.text,
     required this.onPressed,
-    this.isFullWidth = true,
+    this.icon,
+    this.color,
   });
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: isFullWidth ? double.infinity : null,
-      height: 56,
+      width: double.infinity,
       child: ElevatedButton(
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppTheme.accentLime,
-          foregroundColor: AppTheme.primaryNavy, // High contrast text
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          elevation: 0,
+          backgroundColor: color ?? AppTheme.primaryColor,
+          shadowColor: (color ?? AppTheme.primaryColor).withValues(alpha: 0.5),
+          padding: const EdgeInsets.symmetric(vertical: 16),
         ),
         onPressed: onPressed,
-        child: Text(
-          text,
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (icon != null) ...[
+              Icon(icon, size: 20),
+              const SizedBox(width: 8),
+            ],
+            Text(
+              text,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-// --- REUSABLE TRAINING CARD ---
-class TrainingCard extends StatelessWidget {
-  final String title;
-  final String description;
-  final VoidCallback onStart;
+class CustomTextField extends StatelessWidget {
+  final TextEditingController controller;
+  final String hintText;
+  final IconData prefixIcon;
+  final bool isPassword;
+  final TextInputType keyboardType;
 
-  const TrainingCard({
+  const CustomTextField({
     super.key,
-    required this.title,
-    required this.description,
-    required this.onStart,
+    required this.controller,
+    required this.hintText,
+    required this.prefixIcon,
+    this.isPassword = false,
+    this.keyboardType = TextInputType.text,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceDark,
-        borderRadius: BorderRadius.circular(20),
+        color: AppTheme.surfaceColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Image Placeholder (In production: CachedNetworkImage)
-          Container(
-            height: 150,
-            decoration: const BoxDecoration(
-              color: Colors.black26,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-            ),
-            child: const Center(
-              child: Icon(
-                Icons.fitness_center,
-                size: 50,
-                color: Colors.white24,
-              ),
-            ),
+      child: TextFormField(
+        controller: controller,
+        obscureText: isPassword,
+        keyboardType: keyboardType,
+        style: const TextStyle(color: Colors.white),
+        decoration: InputDecoration(
+          hintText: hintText,
+          hintStyle: TextStyle(
+            color: AppTheme.textSecondary.withValues(alpha: 0.5),
           ),
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: Theme.of(context).textTheme.titleLarge),
-                const SizedBox(height: 8),
-                Text(
-                  description,
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-                const SizedBox(height: 16),
-                PrimaryButton(text: "Start Routine", onPressed: onStart),
-              ],
-            ),
+          prefixIcon: Icon(prefixIcon, color: AppTheme.textSecondary),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 20,
+            vertical: 16,
           ),
-        ],
+        ),
       ),
     );
   }
 }
 
-// --- REUSABLE STATS CARD ---
-class StatsCard extends StatelessWidget {
-  final String title;
-  final String value;
+// Efek Kaca (Glassmorphism) untuk overlay di kamera
+class GlassContainer extends StatelessWidget {
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+  final double borderRadius;
 
-  const StatsCard({super.key, required this.title, required this.value});
+  const GlassContainer({
+    super.key,
+    required this.child,
+    this.padding = const EdgeInsets.all(16),
+    this.borderRadius = 16.0,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AppTheme.surfaceDark,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Column(
-          children: [
-            Text(
-              value,
-              style: const TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: AppTheme.accentLime,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(title, style: Theme.of(context).textTheme.bodyMedium),
-          ],
-        ),
+    return Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.4), // Semi transparent
+        borderRadius: BorderRadius.circular(borderRadius),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.2),
+            blurRadius: 10,
+            spreadRadius: 1,
+          ),
+        ],
       ),
+      child: child,
     );
   }
 }

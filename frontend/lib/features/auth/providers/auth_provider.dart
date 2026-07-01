@@ -11,23 +11,23 @@ class AuthProvider extends ChangeNotifier {
   String _errorMessage = '';
 
   // Variabel untuk menyimpan profil dinamis
-  String _userName  = '';
+  String _userName = '';
   String _userEmail = '';
-  String _userId    = ''; // Ditambahkan: ID user dari database
+  String _userId = ''; // Ditambahkan: ID user dari database
 
-  bool get isLoading       => _isLoading;
+  bool get isLoading => _isLoading;
   bool get isAuthenticated => _isAuthenticated;
-  String get errorMessage  => _errorMessage;
+  String get errorMessage => _errorMessage;
 
   // Getter untuk UI & service lain
-  String get userName  => _userName;
+  String get userName => _userName;
   String get userEmail => _userEmail;
-  String get userId    => _userId; // Getter baru
+  String get userId => _userId; // Getter baru
 
   // Mengecek sesi login yang tersimpan
   Future<void> checkAuthStatus() async {
     final prefs = await SharedPreferences.getInstance();
-    final token  = prefs.getString('jwt_token');
+    final token = prefs.getString('jwt_token');
     final savedId = prefs.getString('user_id') ?? '';
 
     if (token != null && token.isNotEmpty) {
@@ -55,11 +55,13 @@ class AuthProvider extends ChangeNotifier {
 
       if (response.statusCode == 200) {
         // Simpan profil + userId ke state
-        _userName  = response.data['name']  ?? 'Pengguna';
+        _userName = response.data['name'] ?? 'Pengguna';
         _userEmail = response.data['email'] ?? '';
         // Backend mengembalikan 'id' atau 'user_id' — sesuaikan jika berbeda
-        _userId    = response.data['id']?.toString() ??
-                     response.data['user_id']?.toString() ?? '';
+        _userId =
+            response.data['id']?.toString() ??
+            response.data['user_id']?.toString() ??
+            '';
 
         // Simpan userId ke SharedPreferences agar tersedia setelah restart
         final prefs = await SharedPreferences.getInstance();
@@ -110,7 +112,7 @@ class AuthProvider extends ChangeNotifier {
           _errorMessage = 'Terjadi kesalahan server.';
         }
       } else {
-        _errorMessage = 'Koneksi ke server gagal.';
+        _errorMessage = 'Ganti IP di Fluter';
       }
     } catch (e) {
       _errorMessage = 'Terjadi kesalahan internal.';
@@ -149,7 +151,7 @@ class AuthProvider extends ChangeNotifier {
           _errorMessage = 'Terjadi kesalahan pada server.';
         }
       } else {
-        _errorMessage = 'Koneksi ke server gagal.';
+        _errorMessage = 'Ganti IP di Flutter';
       }
     } catch (e) {
       _errorMessage = 'Terjadi kesalahan internal.';
@@ -168,9 +170,9 @@ class AuthProvider extends ChangeNotifier {
     _isAuthenticated = false;
 
     // Bersihkan semua data profil
-    _userName  = '';
+    _userName = '';
     _userEmail = '';
-    _userId    = '';
+    _userId = '';
 
     notifyListeners();
   }

@@ -11,7 +11,7 @@ venv/
 *.log
 
 # VSCode
-.vscode/
+.vscode
 
 # Pytest
 .pytest_cache/
@@ -21,3 +21,8 @@ venv/
 
 # Jupyter
 .ipynb_checkpoints/
+
+# Environment Variables — JANGAN commit file ini!
+.env
+.env.local
+.env.production

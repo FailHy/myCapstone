@@ -9,16 +9,16 @@ class TrainingService {
   WebSocketChannel? _channel;
   String? _currentSessionId;
 
-  // Gunakan IP yang sama dengan ApiClient (platform-aware)
   static String get _httpBaseUrl {
     if (kIsWeb) return 'http://127.0.0.1:8000';
-    if (Platform.isAndroid) return 'http://10.93.254.195:8000';
+    // jangan lupa gnti terus selagi belum ke server
+    if (Platform.isAndroid) return 'http://10.20.27.224:8000';
     return 'http://127.0.0.1:8000';
   }
 
   static String get _wsBaseUrl {
     if (kIsWeb) return 'ws://127.0.0.1:8000/ws';
-    if (Platform.isAndroid) return 'ws://10.93.254.195:8000/ws';
+    if (Platform.isAndroid) return 'ws://10.20.27.224:8000/ws';
     return 'ws://127.0.0.1:8000/ws';
   }
 
@@ -110,7 +110,9 @@ class TrainingService {
         result = jsonDecode(response.body) as Map<String, dynamic>;
         debugPrint('[TrainingService] Session ended: $result');
       } else {
-        debugPrint('[TrainingService] session/end error: ${response.statusCode}');
+        debugPrint(
+          '[TrainingService] session/end error: ${response.statusCode}',
+        );
       }
     } catch (e) {
       debugPrint('[TrainingService] endSession error: $e');

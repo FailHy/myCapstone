@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'registration_screen.dart'; // Sesuaikan path jika berbeda
-import '../widgets/custom_widgets.dart'; // Sesuaikan path jika berbeda
-import '../features/auth/providers/auth_provider.dart'; // Sesuaikan path jika berbeda
+import 'registration_screen.dart';
+import '../features/auth/providers/auth_provider.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -14,7 +13,6 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _formKey = GlobalKey<FormState>();
 
   @override
   void dispose() {
@@ -24,10 +22,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _handleLogin() async {
-    // 1. Tutup keyboard saat tombol ditekan
     FocusScope.of(context).unfocus();
-
-    // 2. Validasi input kosong
     if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -37,34 +32,17 @@ class _LoginScreenState extends State<LoginScreen> {
       );
       return;
     }
-
     final authProvider = context.read<AuthProvider>();
-
-    // Simpan reference context saat ini sebelum melakukan proses asynchronous (await)
     final currentContext = context;
-
-    // 3. Eksekusi fungsi login di provider
     final success = await authProvider.login(
       _emailController.text.trim(),
       _passwordController.text.trim(),
     );
-
-    // 4. Penanganan setelah await
-    // Jika SUCCESS (berhasil), kita TIDAK PERLU melakukan apa-apa di sini.
-    // Provider akan memanggil notifyListeners() dan main.dart otomatis
-    // mengganti halaman ini ke MainNavigation(). Menampilkan Snackbar
-    // di layar yang sudah dibuang (unmounted) akan menyebabkan error.
-
-    // Jika GAGAL, tampilkan pesan error
-    if (!success) {
-      // Pastikan context masih aktif sebelum menampilkan Snackbar
-      if (!currentContext.mounted) return;
-
+    if (!success && currentContext.mounted) {
       ScaffoldMessenger.of(currentContext).showSnackBar(
         SnackBar(
           content: Text(authProvider.errorMessage),
           backgroundColor: Colors.red,
-          duration: const Duration(seconds: 3),
         ),
       );
     }
@@ -73,103 +51,130 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      backgroundColor: const Color(0xFF0D0D1A),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            physics: const ClampingScrollPhysics(), // Scroll natural
+            physics: const ClampingScrollPhysics(),
             child: Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  mainAxisSize:
-                      MainAxisSize.min, // Menghindari overflow vertikal
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Center(
-                      child: Icon(
-                        Icons.stream,
-                        size: 48,
-                        color: Colors.blueAccent,
+              padding: const EdgeInsets.all(25.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Center(
+                    child: Icon(
+                      Icons.fitbit_rounded,
+                      size: 60,
+                      color: Colors.limeAccent,
+                    ),
+                  ),
+                  const SizedBox(height: 30),
+                  Text(
+                    'BiTri AI',
+                    style: Theme.of(context).textTheme.displayLarge?.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Your Personal Training Assistant',
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodyLarge?.copyWith(color: Colors.white70),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Train smarter with AI-based movement evaluation',
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodyMedium?.copyWith(color: Colors.white54),
+                  ),
+                  const SizedBox(height: 25),
+                  TextFormField(
+                    controller: _emailController,
+                    decoration: InputDecoration(
+                      hintText: 'Email',
+                      hintStyle: const TextStyle(color: Colors.white54),
+                      prefixIcon: const Icon(
+                        Icons.email_outlined,
+                        color: Colors.grey,
+                      ),
+                      filled: true,
+                      fillColor: Colors.white.withValues(alpha: 0.05),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide.none,
                       ),
                     ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'BiTri AI',
-                      style: Theme.of(context).textTheme.displayLarge,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Your Personal Training Assistant',
-                      style: Theme.of(context).textTheme.bodyLarge,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Train smarter with AI-based movement evaluation',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                    const SizedBox(height: 48),
-
-                    TextField(
-                      controller: _emailController,
-                      decoration: const InputDecoration(
-                        hintText: 'Email',
-                        prefixIcon: Icon(
-                          Icons.email_outlined,
-                          color: Colors.grey,
-                        ),
+                    style: const TextStyle(color: Colors.white),
+                    keyboardType: TextInputType.emailAddress,
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _passwordController,
+                    decoration: InputDecoration(
+                      hintText: 'Password',
+                      hintStyle: const TextStyle(color: Colors.white54),
+                      prefixIcon: const Icon(
+                        Icons.lock_outline,
+                        color: Colors.grey,
                       ),
-                      keyboardType: TextInputType.emailAddress,
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: _passwordController,
-                      decoration: const InputDecoration(
-                        hintText: 'Password',
-                        prefixIcon: Icon(
-                          Icons.lock_outline,
-                          color: Colors.grey,
-                        ),
+                      filled: true,
+                      fillColor: Colors.white.withValues(alpha: 0.05),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide.none,
                       ),
-                      obscureText: true,
                     ),
-                    const SizedBox(height: 32),
-
-                    Consumer<AuthProvider>(
-                      builder: (context, authProvider, child) {
-                        // loading indicator saat proses login berjalan
-                        if (authProvider.isLoading) {
-                          return const Center(
-                            child: CircularProgressIndicator(),
-                          );
-                        }
-                        return PrimaryButton(
-                          text: 'Login',
+                    style: const TextStyle(color: Colors.white),
+                    obscureText: true,
+                  ),
+                  const SizedBox(height: 32),
+                  Consumer<AuthProvider>(
+                    builder: (context, authProvider, child) {
+                      if (authProvider.isLoading) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      return SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
                           onPressed: _handleLogin,
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 24),
-
-                    Center(
-                      child: TextButton(
-                        onPressed: () {
-                          Navigator.push(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blueAccent,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 18),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            textStyle: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          child: const Text('Login'),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 18),
+                  Center(
+                    child: TextButton(
+                      onPressed:
+                          () => Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => const RegistrationScreen(),
+                              builder: (_) => const RegistrationScreen(),
                             ),
-                          );
-                        },
-                        child: const Text(
-                          'New user? Register Here',
-                          style: TextStyle(color: Colors.blueGrey),
-                        ),
+                          ),
+                      child: const Text(
+                        'New user? Register Here',
+                        style: TextStyle(color: Colors.blueGrey),
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),

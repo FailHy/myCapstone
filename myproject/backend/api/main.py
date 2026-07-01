@@ -1,6 +1,7 @@
 import sys
 import asyncio
 import logging
+import logging.handlers
 from pathlib import Path
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, status, WebSocket, WebSocketDisconnect, Depends
@@ -25,6 +26,31 @@ from backend.api.schemas import (
 # ==========================================
 from backend.api.auth import router as auth_router
 
+# ==========================================
+# LOGGING SETUP
+# ==========================================
+_LOG_DIR = Path(__file__).resolve().parents[2] / "logs"
+_LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+# General backend log (INFO+) — tulis ke file dan stdout
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler(_LOG_DIR / "backend.log", encoding="utf-8"),
+    ],
+)
+
+# Feature audit log — satu baris JSON per rep, mudah di-grep/parse:
+#   grep 'FEATURE_AUDIT' logs/feature_audit.log | python -m json.tool
+_audit_handler = logging.FileHandler(_LOG_DIR / "feature_audit.log", encoding="utf-8")
+_audit_handler.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
+_audit_logger = logging.getLogger("bitri.feature_audit")
+_audit_logger.setLevel(logging.INFO)
+_audit_logger.addHandler(_audit_handler)
+_audit_logger.propagate = False  # jangan duplikat ke root logger
+
 session_manager = None
 
 @asynccontextmanager
@@ -35,6 +61,7 @@ async def lifespan(app: FastAPI):
     from models.training_session import TrainingSession  # noqa: F401
     from models.exercise import Exercise     # noqa: F401
     from models.training_history import TrainingHistory  # noqa: F401
+    from models.classification_result import ClassificationResult # noqa: F401
     Base.metadata.create_all(bind=engine)
     print("✅ Database tables verified/created.")
 
@@ -169,7 +196,40 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                 current_state = result.get("state")
                 api_status = result.get("status")
                 
-                if api_status == "success" or current_state != last_state:
+                if api_status == "rep_completed":
+                    # STEP 5 & 6: Save classification result to database without blocking
+                    db_session_id = await session_manager.get_db_session_id(session_id)
+                    if db_session_id:
+                        def save_result():
+                            from backend.core.database import SessionLocal
+                            from models.classification_result import ClassificationResult
+                            from datetime import datetime, timezone
+                            db_local = SessionLocal()
+                            try:
+                                result_record = ClassificationResult(
+                                    session_id=db_session_id,
+                                    rep_number=result.get("rep_count", 0),
+                                    classification_status=result.get("prediction", "unknown"),
+                                    smoothed_prediction=result.get("smoothed_prediction"),
+                                    confidence_score=result.get("confidence"),
+                                    feedback_text=result.get("feedback"),
+                                    features=result.get("features", {}),
+                                    frame_timestamp=datetime.now(timezone.utc)
+                                )
+                                db_local.add(result_record)
+                                db_local.commit()
+                            except Exception as e:
+                                import logging
+                                logging.getLogger(__name__).error(f"Gagal menyimpan classification result: {e}")
+                                db_local.rollback()
+                            finally:
+                                db_local.close()
+
+                        # Run DB operation in a separate thread so it doesn't block websocket
+                        await asyncio.to_thread(save_result)
+                
+                if api_status == "rep_completed" or current_state != last_state:
+                    # In evaluato_service api_status is 'rep_completed' instead of 'success'
                     await websocket.send_json(result)
                     last_state = current_state
                     
@@ -275,4 +335,39 @@ async def get_history(user_id: int, db: Session = Depends(get_db)):
             "created_at":    ts.created_at.isoformat() if ts.created_at else None,
         }
         for ts, th, ex in sessions
+    ]
+
+# STEP 7: Endpoint untuk melihat history hasil klasifikasi per sesi
+@app.get("/session/{session_id}/results")
+async def get_session_results(session_id: str, db: Session = Depends(get_db)):
+    """Mengambil history evaluasi per rep untuk suatu session_id (UUID atau DB session ID)."""
+    from models.classification_result import ClassificationResult
+    from models.training_session import TrainingSession
+
+    # Cek apakah input adalah DB session ID (integer) atau UUID
+    try:
+        db_sess_id = int(session_id)
+    except ValueError:
+        # Jika bukan int, cari UUID di training_sessions (kalau UUID disimpan, tapi saat ini UUID di memory)
+        # Untuk simplicity, asumsikan UUID tidak disimpan langsung di DB, jadi gunakan mapping memori kalau sesi masih aktif
+        db_sess_id = await session_manager.get_db_session_id(session_id)
+        if not db_sess_id:
+            raise HTTPException(status_code=404, detail="Sesi UUID tidak ditemukan di memori. Gunakan ID DB sesi.")
+
+    results = (
+        db.query(ClassificationResult)
+        .filter(ClassificationResult.session_id == db_sess_id)
+        .order_by(ClassificationResult.rep_number.asc())
+        .all()
+    )
+
+    return [
+        {
+            "rep_number": r.rep_number,
+            "prediction": r.classification_status,
+            "smoothed_prediction": r.smoothed_prediction,
+            "confidence": float(r.confidence_score) if r.confidence_score is not None else None,
+            "feedback_text": r.feedback_text
+        }
+        for r in results
     ]

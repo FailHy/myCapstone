@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
 import 'package:provider/provider.dart';
+import 'package:audioplayers/audioplayers.dart';
 
 import '../core/services/pose_detector_service.dart';
 import '../core/services/logging_service.dart';
@@ -33,9 +34,9 @@ class TrainingScreen extends StatefulWidget {
 
 class _TrainingScreenState extends State<TrainingScreen> {
   // ── Camera ────────────────────────────────────────────────────────
-  CameraController?        _controller;
+  CameraController? _controller;
   List<CameraDescription>? _cameras;
-  bool                     _isCameraInitialized = false;
+  bool _isCameraInitialized = false;
 
   // ── Pose Detection ────────────────────────────────────────────────
   final PoseDetectorService _poseService = PoseDetectorService();
@@ -45,30 +46,35 @@ class _TrainingScreenState extends State<TrainingScreen> {
 
   // ── Backend / WebSocket ───────────────────────────────────────────
   late TrainingService _trainingService;
-  bool                 _isEvaluationStarted = false;
+  bool _isEvaluationStarted = false;
 
   // ── UI State ──────────────────────────────────────────────────────
-  String      _currentFeedback    = 'Tekan Mulai Evaluasi';
-  String      _currentState       = '-';
-  String      _connectionStatus   = 'Belum terhubung';
-  int         _reps               = 0;
-  List<Pose>  _detectedPoses      = [];
+  String _currentFeedback = 'Tekan Mulai Evaluasi';
+  String _currentState = '-';
+  String _connectionStatus = 'Belum terhubung';
+  int _reps = 0;
+  List<Pose> _detectedPoses = [];
+  int _countdown = 3;
+  bool _isCountingDown = false;
+
+  // ── Audio ─────────────────────────────────────────────────────────
+  late AudioPlayer _audioPlayer;
 
   // ── FPS Monitor ───────────────────────────────────────────────────
-  int      _totalFrames     = 0; // semua frame dari kamera
-  int      _processedFrames = 0; // frame yang benar-benar diproses ML Kit
-  int      _droppedFrames   = 0; // frame yang di-skip
-  DateTime _fpsWindowStart  = DateTime.now();
-  double   _currentFps      = 0;
-  double   _processedFps    = 0;
+  int _totalFrames = 0; // semua frame dari kamera
+  int _processedFrames = 0; // frame yang benar-benar diproses ML Kit
+  int _droppedFrames = 0; // frame yang di-skip
+  DateTime _fpsWindowStart = DateTime.now();
+  double _currentFps = 0;
+  double _processedFps = 0;
 
   // ── Throttling adaptif ────────────────────────────────────────────
-  DateTime?               _lastProcessedTime;
-  static const Duration   _targetInterval = Duration(milliseconds: 100); // ~10fps
+  DateTime? _lastProcessedTime;
+  static const Duration _targetInterval = Duration(milliseconds: 100); // ~10fps
 
   // ── Logger ────────────────────────────────────────────────────────
   final TrainingLogger _logger = TrainingLogger();
-  DateTime?            _evalStartTime;
+  DateTime? _evalStartTime;
 
   // ─────────────────────────────────────────────────────────────────────
   // LIFECYCLE
@@ -77,6 +83,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
   @override
   void initState() {
     super.initState();
+    _audioPlayer = AudioPlayer()..setReleaseMode(ReleaseMode.stop);
     _poseService.initialize();
     _initService();
     _initCamera();
@@ -88,6 +95,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
     _stopEvaluation();
     _controller?.dispose();
     _poseService.dispose();
+    _audioPlayer.dispose();
     super.dispose();
   }
 
@@ -103,17 +111,25 @@ class _TrainingScreenState extends State<TrainingScreen> {
         setState(() {
           // [FIX B6-01] Backend kirim 'rep_count', bukan 'reps'
           if (result['status'] == 'rep_completed') {
-            _reps = result['rep_count'] is int
+            final newReps = result['rep_count'] is int
                 ? result['rep_count'] as int
                 : (result['rep_count'] as num?)?.toInt() ?? _reps;
+            
+            if (newReps > _reps) {
+              _audioPlayer.play(AssetSource('ding.mp3'));
+            }
+            _reps = newReps;
           }
-          // [FIX B6-02] Tampilkan feedback actionable dari backend
-          final fb = result['feedback']?.toString();
-          if (fb != null && fb.isNotEmpty) _currentFeedback = fb;
 
-          _currentState     = result['smoothed_prediction']?.toString() ?? '-';
+          // Good/Bad Form Indicator sederhana
+          final smoothed = result['smoothed_prediction']?.toString();
+          if (smoothed != null) {
+            _currentFeedback = (smoothed == 'correct') ? '🟢 Good Form' : '🔴 Bad Form';
+            _currentState = smoothed.toUpperCase();
+          }
+
           _connectionStatus = 'Terhubung ✓';
-          
+
           // Auto-stop jika target terpenuhi
           if (_reps >= widget.targetReps && _isEvaluationStarted) {
             _stopEvaluation();
@@ -157,9 +173,10 @@ class _TrainingScreenState extends State<TrainingScreen> {
         // LOW = mencegah buffer bloat di Infinix/MediaTek
         ResolutionPreset.low,
         enableAudio: false,
-        imageFormatGroup: defaultTargetPlatform == TargetPlatform.iOS
-            ? ImageFormatGroup.bgra8888
-            : ImageFormatGroup.yuv420,
+        imageFormatGroup:
+            defaultTargetPlatform == TargetPlatform.iOS
+                ? ImageFormatGroup.bgra8888
+                : ImageFormatGroup.yuv420,
       );
 
       await _controller!.initialize();
@@ -171,12 +188,12 @@ class _TrainingScreenState extends State<TrainingScreen> {
       // ── LOG kamera setelah berhasil init ──────────────────────────
       final previewSize = _controller!.value.previewSize;
       _logger.logCameraInit(
-        width:             previewSize?.width.toInt()  ?? 0,
-        height:            previewSize?.height.toInt() ?? 0,
+        width: previewSize?.width.toInt() ?? 0,
+        height: previewSize?.height.toInt() ?? 0,
         sensorOrientation: camera.sensorOrientation,
-        resolution:        'low',
-        formatGroup:       defaultTargetPlatform == TargetPlatform.iOS
-            ? 'bgra8888' : 'yuv420',
+        resolution: 'low',
+        formatGroup:
+            defaultTargetPlatform == TargetPlatform.iOS ? 'bgra8888' : 'yuv420',
       );
     } catch (e) {
       debugPrint('[TrainingScreen] ❌ Error init kamera: $e');
@@ -191,7 +208,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
     if (_isEvaluationStarted) return;
 
     setState(() {
-      _currentFeedback  = 'Menghubungkan ke server...';
+      _currentFeedback = 'Menghubungkan ke server...';
       _connectionStatus = 'Connecting...';
     });
 
@@ -207,16 +224,18 @@ class _TrainingScreenState extends State<TrainingScreen> {
     );
 
     final success = await _trainingService.startSession(
-      userId:       effectiveId,
+      userId: effectiveId,
       exerciseType: widget.exerciseType.backendCode,
     );
 
     if (!success) {
-      _logger.logWebSocketError('startSession gagal — server tidak dapat dihubungi');
+      _logger.logWebSocketError(
+        'startSession gagal — server tidak dapat dihubungi',
+      );
       await _logger.close();
       if (!mounted) return;
       setState(() {
-        _currentFeedback  = 'Gagal terhubung ke server';
+        _currentFeedback = 'Gagal terhubung ke server';
         _connectionStatus = 'Offline';
       });
       return;
@@ -224,7 +243,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
 
     // ── Log WebSocket connect ─────────────────────────────────────
     _logger.logWebSocketConnect(
-      url:       'ws://10.93.254.195:8000/ws',
+      url: 'ws://10.93.254.195:8000/ws',
       sessionId: 'connected',
     );
 
@@ -233,18 +252,35 @@ class _TrainingScreenState extends State<TrainingScreen> {
     if (!mounted) return;
     setState(() {
       _isEvaluationStarted = true;
-      _currentFeedback     = 'Deteksi Pose Aktif';
-      _connectionStatus    = 'Terhubung ✓';
-      _totalFrames     = 0;
+      _isCountingDown = true;
+      _countdown = 3;
+      _currentFeedback = 'Bersiap... $_countdown';
+      _connectionStatus = 'Terhubung ✓';
+      _totalFrames = 0;
       _processedFrames = 0;
-      _droppedFrames   = 0;
-      _fpsWindowStart  = DateTime.now();
+      _droppedFrames = 0;
+      _fpsWindowStart = DateTime.now();
     });
 
+    // ── Countdown Loop ────────────────────────────────────────────
+    while (_countdown > 0) {
+      await Future.delayed(const Duration(seconds: 1));
+      if (!mounted || !_isEvaluationStarted) return;
+      setState(() {
+        _countdown--;
+        if (_countdown > 0) {
+          _currentFeedback = 'Bersiap... $_countdown';
+        } else {
+          _currentFeedback = 'Mulai!';
+          _isCountingDown = false;
+        }
+      });
+    }
+
     try {
-      if (_controller != null && _controller!.value.isInitialized) {
+      if (_controller != null && _controller!.value.isInitialized && _isEvaluationStarted) {
         await _controller!.startImageStream(_onCameraFrame);
-        _logger.logEvalStart(); // ← LOG EVAL START
+        _logger.logEvalStart();
         debugPrint('[TrainingScreen] 📡 Image stream dimulai');
         debugPrint('[TrainingScreen] 📝 Log: ${_logger.logFilePath}');
       }
@@ -270,35 +306,39 @@ class _TrainingScreenState extends State<TrainingScreen> {
     final sessionResult = await _trainingService.endSession();
 
     // Log eval stop
-    final duration = _evalStartTime != null
-        ? DateTime.now().difference(_evalStartTime!)
-        : Duration.zero;
+    final duration =
+        _evalStartTime != null
+            ? DateTime.now().difference(_evalStartTime!)
+            : Duration.zero;
     _logger.logEvalStop(
-      duration:        duration,
-      totalFrames:     _totalFrames + _processedFrames + _droppedFrames,
+      duration: duration,
+      totalFrames: _totalFrames + _processedFrames + _droppedFrames,
       processedFrames: _processedFrames,
-      reps:            _reps,
+      reps: _reps,
     );
     await _logger.close();
 
     if (!mounted) return;
     setState(() {
       _isEvaluationStarted = false;
-      _currentFeedback     = 'Selesai';
-      _connectionStatus    = '';
-      _detectedPoses       = [];
+      _isCountingDown = false;
+      _currentFeedback = 'Selesai';
+      _connectionStatus = '';
+      _detectedPoses = [];
     });
 
     // [FIX B5-03] Navigasi ke ResultScreen dengan data nyata
     if (sessionResult != null && mounted) {
-      final backendErrorDist = sessionResult['error_distribution'] as Map<String, dynamic>?;
-      final errorDist = backendErrorDist?.map((k, v) => MapEntry(k, v as int)) ?? {};
-      
+      final backendErrorDist =
+          sessionResult['error_distribution'] as Map<String, dynamic>?;
+      final errorDist =
+          backendErrorDist?.map((k, v) => MapEntry(k, v as int)) ?? {};
+
       final result = TrainingResult(
         exerciseType: widget.exerciseType,
-        totalReps:    (sessionResult['total_reps']   as num?)?.toInt()    ?? _reps,
-        correctReps:  (sessionResult['correct_reps'] as num?)?.toInt()    ?? 0,
-        accuracy:     (sessionResult['accuracy']     as num?)?.toDouble() ?? 0.0,
+        totalReps: (sessionResult['total_reps'] as num?)?.toInt() ?? _reps,
+        correctReps: (sessionResult['correct_reps'] as num?)?.toInt() ?? 0,
+        accuracy: (sessionResult['accuracy'] as num?)?.toDouble() ?? 0.0,
         errorDistribution: errorDist,
       );
       Navigator.push(
@@ -307,7 +347,6 @@ class _TrainingScreenState extends State<TrainingScreen> {
       );
     }
   }
-
 
   // ─────────────────────────────────────────────────────────────────────
   // CAMERA FRAME CALLBACK
@@ -333,8 +372,8 @@ class _TrainingScreenState extends State<TrainingScreen> {
       return;
     }
 
-    _lastProcessedTime  = now;
-    _isProcessingFrame  = true;
+    _lastProcessedTime = now;
+    _isProcessingFrame = true;
 
     try {
       // ── Dapatkan sensorOrientation dari kamera aktif ─────────────
@@ -344,11 +383,8 @@ class _TrainingScreenState extends State<TrainingScreen> {
       );
 
       // ── Proses via PoseDetectorService ───────────────────────────
-      final Map<PoseLandmarkType, PoseLandmark>? landmarks =
-          await _poseService.processCameraImage(
-        image,
-        camera.sensorOrientation,
-      );
+      final Map<PoseLandmarkType, PoseLandmark>? landmarks = await _poseService
+          .processCameraImage(image, camera.sensorOrientation);
 
       _processedFrames++;
 
@@ -375,9 +411,9 @@ class _TrainingScreenState extends State<TrainingScreen> {
 
       // ── Akumulasi ke logger (1 sample per window) ─────────────────
       _logger.accumulateFrame(
-        processed:       true,
-        dropped:         false,
-        infMs:           _poseService.lastProcessingMs,
+        processed: true,
+        dropped: false,
+        infMs: _poseService.lastProcessingMs,
         sampleLandmarks: extracted,
       );
     } catch (e) {
@@ -398,9 +434,9 @@ class _TrainingScreenState extends State<TrainingScreen> {
     Map<PoseLandmarkType, PoseLandmark> landmarks,
   ) {
     final shoulder = landmarks[PoseLandmarkType.rightShoulder];
-    final elbow    = landmarks[PoseLandmarkType.rightElbow];
-    final wrist    = landmarks[PoseLandmarkType.rightWrist];
-    final hip      = landmarks[PoseLandmarkType.rightHip];
+    final elbow = landmarks[PoseLandmarkType.rightElbow];
+    final wrist = landmarks[PoseLandmarkType.rightWrist];
+    final hip = landmarks[PoseLandmarkType.rightHip];
 
     // Semua 4 landmark wajib ada
     if (shoulder == null || elbow == null || wrist == null || hip == null) {
@@ -410,9 +446,9 @@ class _TrainingScreenState extends State<TrainingScreen> {
 
     final extracted = {
       'shoulder': _toMap(shoulder),
-      'elbow':    _toMap(elbow),
-      'wrist':    _toMap(wrist),
-      'hip':      _toMap(hip),
+      'elbow': _toMap(elbow),
+      'wrist': _toMap(wrist),
+      'hip': _toMap(hip),
     };
 
     // Validasi: tidak semua titik boleh nol
@@ -434,9 +470,9 @@ class _TrainingScreenState extends State<TrainingScreen> {
   }
 
   Map<String, dynamic> _toMap(PoseLandmark lm) => {
-    'x':          lm.x,
-    'y':          lm.y,
-    'z':          lm.z,
+    'x': lm.x,
+    'y': lm.y,
+    'z': lm.z,
     'visibility': lm.likelihood,
   };
 
@@ -449,12 +485,12 @@ class _TrainingScreenState extends State<TrainingScreen> {
     if (elapsed.inMilliseconds >= 1000) {
       final double secs = elapsed.inMilliseconds / 1000.0;
       setState(() {
-        _currentFps   = _totalFrames     / secs;
+        _currentFps = _totalFrames / secs;
         _processedFps = _processedFrames / secs;
         // Reset window
-        _totalFrames     = 0;
+        _totalFrames = 0;
         _processedFrames = 0;
-        _fpsWindowStart  = DateTime.now();
+        _fpsWindowStart = DateTime.now();
       });
     }
   }
@@ -477,10 +513,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
       ),
       body: SafeArea(
         child: Column(
-          children: [
-            Expanded(child: _buildCameraView()),
-            _buildControlPanel(),
-          ],
+          children: [Expanded(child: _buildCameraView()), _buildControlPanel()],
         ),
       ),
     );
@@ -520,11 +553,11 @@ class _TrainingScreenState extends State<TrainingScreen> {
           top: 12,
           left: 12,
           child: _FpsOverlay(
-            cameraFps:    _currentFps,
+            cameraFps: _currentFps,
             processedFps: _processedFps,
-            dropped:      _droppedFrames,
-            poseDropped:  _poseService.droppedFrames,
-            lastMs:       _poseService.lastProcessingMs,
+            dropped: _droppedFrames,
+            poseDropped: _poseService.droppedFrames,
+            lastMs: _poseService.lastProcessingMs,
           ),
         ),
 
@@ -535,10 +568,10 @@ class _TrainingScreenState extends State<TrainingScreen> {
           right: 0,
           child: Center(
             child: _StatusBadge(
-              feedback:   _currentFeedback,
-              state:      _currentState,
+              feedback: _currentFeedback,
+              state: _currentState,
               connection: _connectionStatus,
-              reps:       _reps,
+              reps: _reps,
             ),
           ),
         ),
@@ -566,24 +599,26 @@ class _TrainingScreenState extends State<TrainingScreen> {
               await _stopEvaluation();
               if (mounted && Navigator.canPop(context)) Navigator.pop(context);
             },
-            icon:  const Icon(Icons.stop_circle_outlined),
+            icon: const Icon(Icons.stop_circle_outlined),
             label: const Text('Selesai', style: TextStyle(fontSize: 16)),
           ),
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
-              backgroundColor: _isEvaluationStarted
-                  ? Colors.grey.shade400
-                  : Colors.green.shade600,
+              backgroundColor:
+                  _isEvaluationStarted
+                      ? Colors.grey.shade400
+                      : Colors.green.shade600,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
             ),
-            onPressed: _isCameraInitialized && !_isEvaluationStarted
-                ? _startEvaluation
-                : null,
-            icon:  const Icon(Icons.play_circle_fill),
+            onPressed:
+                _isCameraInitialized && !_isEvaluationStarted
+                    ? _startEvaluation
+                    : null,
+            icon: const Icon(Icons.play_circle_fill),
             label: const Text('Mulai', style: TextStyle(fontSize: 16)),
           ),
         ],
@@ -599,8 +634,8 @@ class _TrainingScreenState extends State<TrainingScreen> {
 class _FpsOverlay extends StatelessWidget {
   final double cameraFps;
   final double processedFps;
-  final int    dropped;
-  final int    poseDropped;
+  final int dropped;
+  final int poseDropped;
   final double lastMs;
 
   const _FpsOverlay({
@@ -643,7 +678,7 @@ class _StatusBadge extends StatelessWidget {
   final String feedback;
   final String state;
   final String connection;
-  final int    reps;
+  final int reps;
 
   const _StatusBadge({
     required this.feedback,
@@ -654,11 +689,18 @@ class _StatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Color badgeColor = Colors.indigo.withValues(alpha: 0.92);
+    if (feedback.contains('🟢')) {
+      badgeColor = Colors.green.shade700.withValues(alpha: 0.92);
+    } else if (feedback.contains('🔴')) {
+      badgeColor = Colors.red.shade700.withValues(alpha: 0.92);
+    }
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.indigo.withValues(alpha: 0.92),
+        color: badgeColor,
         borderRadius: BorderRadius.circular(20),
       ),
       child: Column(
@@ -699,9 +741,10 @@ class _StatusBadge extends StatelessWidget {
               child: Text(
                 connection,
                 style: TextStyle(
-                  color: connection.contains('✓')
-                      ? Colors.greenAccent
-                      : Colors.orangeAccent,
+                  color:
+                      connection.contains('✓')
+                          ? Colors.greenAccent
+                          : Colors.orangeAccent,
                   fontSize: 12,
                 ),
               ),
@@ -717,26 +760,28 @@ class _StatusBadge extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class PosePainter extends CustomPainter {
-  final List<Pose>         poses;
-  final Size               imageSize;
+  final List<Pose> poses;
+  final Size imageSize;
   final InputImageRotation rotation;
 
   const PosePainter(this.poses, this.imageSize, this.rotation);
 
   @override
   void paint(Canvas canvas, Size size) {
-    final jointPaint = Paint()
-      ..style       = PaintingStyle.fill
-      ..color       = Colors.greenAccent
-      ..strokeWidth = 4.0;
+    final jointPaint =
+        Paint()
+          ..style = PaintingStyle.fill
+          ..color = Colors.greenAccent
+          ..strokeWidth = 4.0;
 
-    final bonePaint = Paint()
-      ..style       = PaintingStyle.stroke
-      ..color       = Colors.greenAccent.withValues(alpha: 0.6)
-      ..strokeWidth = 2.0;
+    final bonePaint =
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..color = Colors.greenAccent.withValues(alpha: 0.6)
+          ..strokeWidth = 2.0;
 
     // Skala — gambar landscape, layar portrait → sumbu dibalik
-    final double scaleX = size.width  / imageSize.height;
+    final double scaleX = size.width / imageSize.height;
     final double scaleY = size.height / imageSize.width;
 
     for (final pose in poses) {
@@ -752,25 +797,30 @@ class PosePainter extends CustomPainter {
     }
   }
 
-  Offset _toOffset(
-      PoseLandmark lm, Size size, double sx, double sy) {
+  Offset _toOffset(PoseLandmark lm, Size size, double sx, double sy) {
     return Offset(
       size.width - (lm.y * sx), // rotasi 270° untuk kamera depan
       lm.x * sy,
     );
   }
 
-  void _drawBones(Canvas canvas, Pose pose, Size size,
-      double sx, double sy, Paint paint) {
+  void _drawBones(
+    Canvas canvas,
+    Pose pose,
+    Size size,
+    double sx,
+    double sy,
+    Paint paint,
+  ) {
     final connections = [
       [PoseLandmarkType.rightShoulder, PoseLandmarkType.rightElbow],
-      [PoseLandmarkType.rightElbow,    PoseLandmarkType.rightWrist],
+      [PoseLandmarkType.rightElbow, PoseLandmarkType.rightWrist],
       [PoseLandmarkType.rightShoulder, PoseLandmarkType.rightHip],
-      [PoseLandmarkType.leftShoulder,  PoseLandmarkType.leftElbow],
-      [PoseLandmarkType.leftElbow,     PoseLandmarkType.leftWrist],
-      [PoseLandmarkType.leftShoulder,  PoseLandmarkType.leftHip],
+      [PoseLandmarkType.leftShoulder, PoseLandmarkType.leftElbow],
+      [PoseLandmarkType.leftElbow, PoseLandmarkType.leftWrist],
+      [PoseLandmarkType.leftShoulder, PoseLandmarkType.leftHip],
       [PoseLandmarkType.rightShoulder, PoseLandmarkType.leftShoulder],
-      [PoseLandmarkType.rightHip,      PoseLandmarkType.leftHip],
+      [PoseLandmarkType.rightHip, PoseLandmarkType.leftHip],
     ];
 
     for (final pair in connections) {

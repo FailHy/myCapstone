@@ -14,6 +14,14 @@ class TrainingSetupScreen extends StatefulWidget {
 class _TrainingSetupScreenState extends State<TrainingSetupScreen> {
   int _targetReps = 10;
   final List<int> _repsOptions = [5, 10, 15, 20];
+  bool _isCustomReps = false;
+  final TextEditingController _customRepsController = TextEditingController();
+
+  @override
+  void dispose() {
+    _customRepsController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -93,26 +101,72 @@ class _TrainingSetupScreenState extends State<TrainingSetupScreen> {
                           '$reps Reps',
                           style: TextStyle(
                             color:
-                                isSelected
+                                isSelected && !_isCustomReps
                                     ? Colors.white
                                     : Colors.indigo.shade300,
-                            fontWeight:
-                                isSelected ? FontWeight.bold : FontWeight.bold,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
-                        selected: isSelected,
+                        selected: isSelected && !_isCustomReps,
                         selectedColor: Colors.blueAccent,
                         backgroundColor: Colors.white.withValues(alpha: 0.1),
                         onSelected: (selected) {
                           if (selected) {
                             setState(() {
                               _targetReps = reps;
+                              _isCustomReps = false;
                             });
                           }
                         },
                       );
-                    }).toList(),
+                    }).toList()
+                      ..add(
+                        ChoiceChip(
+                          label: Text(
+                            'Custom',
+                            style: TextStyle(
+                              color: _isCustomReps ? Colors.white : Colors.indigo.shade300,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          selected: _isCustomReps,
+                          selectedColor: Colors.blueAccent,
+                          backgroundColor: Colors.white.withValues(alpha: 0.1),
+                          onSelected: (selected) {
+                            setState(() {
+                              _isCustomReps = true;
+                            });
+                          },
+                        ),
+                      ),
               ),
+
+              if (_isCustomReps) ...[
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _customRepsController,
+                  keyboardType: TextInputType.number,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    labelText: 'Masukkan Target Repetisi (1-100)',
+                    labelStyle: const TextStyle(color: Colors.white54),
+                    enabledBorder: OutlineInputBorder(
+                      borderSide: const BorderSide(color: Colors.white24),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderSide: const BorderSide(color: Colors.blueAccent),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  onChanged: (value) {
+                    final intValue = int.tryParse(value);
+                    if (intValue != null) {
+                      _targetReps = intValue;
+                    }
+                  },
+                ),
+              ],
 
               const Spacer(),
 
@@ -127,6 +181,20 @@ class _TrainingSetupScreenState extends State<TrainingSetupScreen> {
                   ),
                 ),
                 onPressed: () {
+                  if (_isCustomReps) {
+                    final val = int.tryParse(_customRepsController.text);
+                    if (val == null || val < 1 || val > 100) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Masukkan angka valid antara 1 hingga 100'),
+                          backgroundColor: Colors.redAccent,
+                        ),
+                      );
+                      return;
+                    }
+                    _targetReps = val;
+                  }
+                  
                   Navigator.pushReplacement(
                     context,
                     MaterialPageRoute(

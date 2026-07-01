@@ -115,8 +115,17 @@ class ExerciseEvaluatorService:
         angles = compute_frame_angles(arm_lms)
         features_frame = {**angles, "mean_visibility": mean_vis}
 
-        self.buffer.append(timestamp, features_frame)
+        # FIX: update segmenter DULU, baru append ke buffer jika state aktif.
+        # Ini konsisten dengan collect_data.py L330-333 (training time):
+        #   event = segmenter.update(...)
+        #   if segmenter.state != "idle":  ← guard
+        #       buffer.append(...)
+        # Tanpa guard ini, idle frames sebelum rep dimulai masuk ke buffer
+        # dan mengkontaminasi: rep_duration, velocity_mean, up_phase_ratio,
+        # shoulder_angle_range — yaitu 4 dari 5 feature terpenting model.
         event = self.segmenter.update(angles["elbow_angle"], timestamp)
+        if self.segmenter.state != "idle":
+            self.buffer.append(timestamp, features_frame)
 
         if event == "completed":
             self.rep_count += 1
@@ -232,13 +241,34 @@ class ExerciseEvaluatorService:
         else:
             label = "correct" if pred_idx == 0 else "incorrect"
 
-        # Log distribusi probabilitas untuk debugging
+        # === STRUCTURED FEATURE AUDIT LOG ===
+        # Log distribusi probabilitas DAN nilai fitur aktual untuk setiap rep.
+        # Ini memungkinkan diagnosis kasus body_swing/incorrect tanpa debugger:
+        #   grep 'FEATURE_AUDIT' backend.log | python -m json.tool
         if proba is not None and self.label_encoder is not None:
-            dist = {str(cls): round(float(p), 4)
-                    for cls, p in zip(self.label_encoder.classes_, proba)}
-            import logging
-            logging.getLogger(__name__).info(
-                f"[{self.exercise_type}] Rep prediction: {label} ({confidence:.2%}) | dist={dist}"
+            import logging, json
+            dist = {
+                str(cls): round(float(p), 4)
+                for cls, p in zip(self.label_encoder.classes_, proba)
+            }
+            audit_logger = logging.getLogger("bitri.feature_audit")
+            audit_logger.info(
+                "FEATURE_AUDIT " + json.dumps({
+                    "exercise":      self.exercise_type,
+                    "rep":           self.rep_count,
+                    "prediction":    label,
+                    "confidence":    round(confidence, 4),
+                    "proba_dist":    dist,
+                    "raw_features": {
+                        k: round(float(v), 4)
+                        for k, v in raw_features.items()
+                        if isinstance(v, (int, float))
+                    },
+                    "scaled_features": {
+                        col: round(float(X_live[col].iloc[0]), 4)
+                        for col in self.feature_columns
+                    },
+                }, ensure_ascii=False)
             )
 
         return label, confidence

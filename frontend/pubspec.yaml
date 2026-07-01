@@ -40,15 +40,19 @@ dependencies:
   
   # Local Storage (Untuk simpan JWT Token)
   shared_preferences: ^2.2.3
-  
+  path_provider: ^2.1.5
+
   # Camera & WebSocket (Persiapan untuk Fase 2)
   camera: ^0.11.2+1
-  web_socket_channel: ^2.4.4
+  web_socket_channel: ^3.0.3
 # ===========================================================
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
+  google_mlkit_pose_detection: ^0.14.1
+  http: ^1.6.0
+  audioplayers: ^6.6.0
 
 dev_dependencies:
   flutter_test:
@@ -72,10 +76,8 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
-  # To add assets to your application, add an assets section, like this:
-  # assets:
-  #   - images/a_dot_burr.jpeg
-  #   - images/a_dot_ham.jpeg
+  assets:
+    - assets/ding.mp3
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

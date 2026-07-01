@@ -31,25 +31,37 @@ class _HistoryScreenState extends State<HistoryScreen> {
       return;
     }
 
+    setState(() {
+      _error = null;
+    });
+
     try {
-      final response = await ApiClient().dio.get('/history/$userId');
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final response = await ApiClient().dio.get('/history/$userId?t=$timestamp');
       if (response.statusCode == 200) {
         final data = response.data as List<dynamic>;
-        setState(() {
-          _sessions = data.cast<Map<String, dynamic>>();
-          _isLoading = false;
-        });
+        if (mounted) {
+          setState(() {
+            _sessions = data.cast<Map<String, dynamic>>();
+            _isLoading = false;
+            _error = null;
+          });
+        }
       } else {
+        if (mounted) {
+          setState(() {
+            _error = 'Gagal memuat riwayat (${response.statusCode})';
+            _isLoading = false;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
         setState(() {
-          _error = 'Gagal memuat riwayat (${response.statusCode})';
+          _error = 'Koneksi gagal: $e';
           _isLoading = false;
         });
       }
-    } catch (e) {
-      setState(() {
-        _error = 'Koneksi gagal: $e';
-        _isLoading = false;
-      });
     }
   }
 

@@ -78,6 +78,11 @@ class SessionManager:
             if session_id in self._db_session_ids:
                 self._db_session_ids[session_id] = db_session_id
 
+    async def get_db_session_id(self, session_id: str) -> Optional[int]:
+        """Ambil mapping UUID session -> DB row ID."""
+        async with self._lock:
+            return self._db_session_ids.get(session_id)
+
     async def get_session(self, session_id: str) -> ExerciseEvaluatorService:
         """
         Ambil service untuk session_id yang aktif.

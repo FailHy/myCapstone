@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../widgets/custom_widgets.dart';
 import '../features/auth/providers/auth_provider.dart';
 
 class RegistrationScreen extends StatefulWidget {
@@ -81,7 +80,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
           backgroundColor: Colors.green,
           duration: Duration(seconds: 2),
           behavior: SnackBarBehavior.floating,
-          margin: EdgeInsets.all(16),
+          margin: EdgeInsets.all(25.0),
         ),
       );
 
@@ -121,7 +120,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      backgroundColor: const Color(0xFF0D0D1A), // Konsisten dengan tema gelap
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -137,9 +136,9 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                     // Logo
                     const Center(
                       child: Icon(
-                        Icons.stream,
-                        size: 48,
-                        color: Colors.blueAccent,
+                        Icons.fitbit_rounded,
+                        size: 60,
+                        color: Colors.limeAccent,
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -147,30 +146,45 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                     // Title
                     Text(
                       'BiTri AI',
-                      style: Theme.of(context).textTheme.displayLarge,
+                      style: Theme.of(context).textTheme.displayLarge?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     Text(
                       'Your Personal Training Assistant',
-                      style: Theme.of(context).textTheme.bodyLarge,
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodyLarge?.copyWith(color: Colors.white70),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       'Train smarter with AI-based movement evaluation',
-                      style: Theme.of(context).textTheme.bodyMedium,
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodyMedium?.copyWith(color: Colors.white54),
                     ),
-                    const SizedBox(height: 48),
+                    const SizedBox(height: 40),
 
                     // Name Field
                     TextFormField(
                       controller: _nameController,
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         hintText: 'Name',
-                        prefixIcon: Icon(
+                        hintStyle: const TextStyle(color: Colors.white54),
+                        prefixIcon: const Icon(
                           Icons.people_outlined,
                           color: Colors.grey,
                         ),
+                        filled: true,
+                        fillColor: Colors.white.withValues(alpha: 0.05),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide.none,
+                        ),
                       ),
+                      style: const TextStyle(color: Colors.white),
                       keyboardType: TextInputType.name,
                       textInputAction: TextInputAction.next,
                     ),
@@ -179,13 +193,21 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                     // Email Field
                     TextFormField(
                       controller: _emailController,
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         hintText: 'Email',
-                        prefixIcon: Icon(
+                        hintStyle: const TextStyle(color: Colors.white54),
+                        prefixIcon: const Icon(
                           Icons.email_outlined,
                           color: Colors.grey,
                         ),
+                        filled: true,
+                        fillColor: Colors.white.withValues(alpha: 0.05),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide.none,
+                        ),
                       ),
+                      style: const TextStyle(color: Colors.white),
                       keyboardType: TextInputType.emailAddress,
                       textInputAction: TextInputAction.next,
                     ),
@@ -194,13 +216,21 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                     // Password Field
                     TextFormField(
                       controller: _passwordController,
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         hintText: 'Password',
-                        prefixIcon: Icon(
+                        hintStyle: const TextStyle(color: Colors.white54),
+                        prefixIcon: const Icon(
                           Icons.lock_outline,
                           color: Colors.grey,
                         ),
+                        filled: true,
+                        fillColor: Colors.white.withValues(alpha: 0.05),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide.none,
+                        ),
                       ),
+                      style: const TextStyle(color: Colors.white),
                       obscureText: true,
                       textInputAction: TextInputAction.done,
                       onFieldSubmitted: (_) => _handleRegister(),
@@ -214,7 +244,9 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                           return const Center(
                             child: Column(
                               children: [
-                                CircularProgressIndicator(),
+                                CircularProgressIndicator(
+                                  color: Colors.blueAccent,
+                                ),
                                 SizedBox(height: 8),
                                 Text(
                                   'Membuat akun...',
@@ -224,9 +256,24 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                             ),
                           );
                         }
-                        return PrimaryButton(
-                          text: 'Register',
-                          onPressed: _handleRegister,
+                        return SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: _handleRegister,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blueAccent,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 18),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              textStyle: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            child: const Text('Register'),
+                          ),
                         );
                       },
                     ),

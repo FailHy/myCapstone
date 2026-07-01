@@ -8,9 +8,15 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFF0D0D1A),
       appBar: AppBar(
-        title: const Text('BiTri AI'),
-        automaticallyImplyLeading: false, // Menghilangkan tombol back bawaan
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        title: const Text(
+          'Your Training',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        automaticallyImplyLeading: false,
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -18,26 +24,21 @@ class HomeScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Halo, Pengguna!',
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+              const Text(
+                'Select your focus area for today\'s session.',
+                style: TextStyle(color: Colors.white70, fontSize: 16),
               ),
-              const SizedBox(height: 8),
-              const Text('Pilih rutinitas latihan Anda hari ini:'),
               const SizedBox(height: 32),
-
               _buildExerciseCard(
                 context,
                 title: ExerciseType.biceps.displayName,
-                subtitle: 'Fokus pada otot lengan depan',
+                subtitle:
+                    'High-intensity isolation exercises designed to build peak and thickness in the biceps muscles.',
                 icon: Icons.fitness_center,
                 type: ExerciseType.biceps,
                 colors: [Colors.blueAccent, Colors.lightBlue],
               ),
               const SizedBox(height: 20),
-
               _buildExerciseCard(
                 context,
                 title: ExerciseType.triceps.displayName,
@@ -68,8 +69,11 @@ class HomeScreen extends StatelessWidget {
         onTap: () {
           Navigator.push(
             context,
-            MaterialPageRoute(
-              builder: (context) => TrainingSetupScreen(exerciseType: type),
+            PageRouteBuilder(
+              pageBuilder:
+                  (_, __, ___) => TrainingSetupScreen(exerciseType: type),
+              transitionsBuilder:
+                  (_, a, __, c) => FadeTransition(opacity: a, child: c),
             ),
           );
         },
@@ -99,12 +103,15 @@ class HomeScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 8),
-              Text(subtitle, style: const TextStyle(color: Colors.white70)),
+              Text(
+                subtitle,
+                style: const TextStyle(color: Colors.white70, fontSize: 14),
+              ),
               const SizedBox(height: 24),
               const Row(
                 children: [
                   Text(
-                    'Pilih Latihan',
+                    'Start Routine',
                     style: TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,

@@ -13,14 +13,6 @@ class MainNavigation extends StatefulWidget {
 class _MainNavigationState extends State<MainNavigation> {
   int _selectedIndex = 0;
 
-  // PERBAIKAN: Memasukkan ketiga laman ke dalam urutan Bottom Menu
-  // Menambahkan parameter wajib exerciseType pada TrainingScreen
-  final List<Widget> _screens = [
-    const HomeScreen(),
-    const ExerciseSelectionScreen(), // <-- PERBAIKAN DI SINI
-    const ProfileScreen(),
-  ];
-
   void _onItemTapped(int index) {
     setState(() {
       _selectedIndex = index;
@@ -32,14 +24,28 @@ class _MainNavigationState extends State<MainNavigation> {
     return Scaffold(
       body: IndexedStack(
         index: _selectedIndex,
-        children: _screens,
+        children: [
+          const HomeScreen(),
+          const ExerciseSelectionScreen(),
+          ProfileScreen(isActive: _selectedIndex == 2),
+        ],
       ),
       bottomNavigationBar: BottomNavigationBar(
+        type: BottomNavigationBarType.fixed,
+        backgroundColor: const Color(0xFF0D0D1A), // Tema gelap
+        selectedItemColor: Colors.blueAccent,
+        unselectedItemColor: Colors.white54,
+        selectedLabelStyle: const TextStyle(
+          fontWeight: FontWeight.bold,
+          fontSize: 12,
+        ),
+        unselectedLabelStyle: const TextStyle(
+          fontWeight: FontWeight.normal,
+          fontSize: 12,
+        ),
+        elevation: 0, // Tidak ada bayangan agar rata
         currentIndex: _selectedIndex,
         onTap: _onItemTapped,
-        selectedItemColor: Colors.blueAccent,
-        unselectedItemColor: Colors.grey,
-        // PERBAIKAN: Menambahkan laman Training di urutan kedua
         items: const [
           BottomNavigationBarItem(
             icon: Icon(Icons.home_outlined),
