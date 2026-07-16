@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../features/auth/providers/auth_provider.dart';
+import '../theme.dart';
 
 class RegistrationScreen extends StatefulWidget {
   const RegistrationScreen({super.key});
@@ -14,6 +15,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
+  bool _obscurePassword = true;
 
   @override
   void dispose() {
@@ -32,9 +34,15 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         _emailController.text.isEmpty ||
         _passwordController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Pastikan semua form terisi!'),
-          backgroundColor: Colors.red,
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.info_outline, color: Colors.white, size: 18),
+              SizedBox(width: 8),
+              Text('Please fill in all fields.'),
+            ],
+          ),
+          backgroundColor: AppTheme.warning,
         ),
       );
       return;
@@ -44,9 +52,15 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
     if (!emailRegex.hasMatch(_emailController.text.trim())) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Format email tidak valid!'),
-          backgroundColor: Colors.red,
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.error_outline, color: Colors.white, size: 18),
+              SizedBox(width: 8),
+              Text('Invalid email format.'),
+            ],
+          ),
+          backgroundColor: AppTheme.error,
         ),
       );
       return;
@@ -67,51 +81,43 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     if (!mounted) return;
 
     if (success) {
-      // Sukses: Tampilkan SnackBar hijau
       scaffoldMessenger.showSnackBar(
-        const SnackBar(
-          content: Row(
+        SnackBar(
+          content: const Row(
             children: [
-              Icon(Icons.check_circle, color: Colors.white),
+              Icon(Icons.check_circle_outline, color: Colors.white, size: 18),
               SizedBox(width: 8),
-              Text('Registrasi Berhasil! Silakan Login.'),
+              Text('Account created! Please login.'),
             ],
           ),
-          backgroundColor: Colors.green,
-          duration: Duration(seconds: 2),
-          behavior: SnackBarBehavior.floating,
-          margin: EdgeInsets.all(25.0),
+          backgroundColor: AppTheme.success,
+          duration: const Duration(seconds: 2),
         ),
       );
 
-      // Tunggu sebentar agar SnackBar sempat terlihat
       await Future.delayed(const Duration(milliseconds: 1500));
 
-      // Cek mounted lagi sebelum navigasi
       if (mounted) {
         navigator.pop();
       }
     } else {
-      // Gagal: Tampilkan pesan error
       scaffoldMessenger.showSnackBar(
         SnackBar(
           content: Row(
             children: [
-              const Icon(Icons.error, color: Colors.white),
+              const Icon(Icons.error_outline, color: Colors.white, size: 18),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   authProvider.errorMessage.isNotEmpty
                       ? authProvider.errorMessage
-                      : 'Registrasi gagal. Silakan coba lagi.',
+                      : 'Registration failed. Please try again.',
                 ),
               ),
             ],
           ),
-          backgroundColor: Colors.red,
+          backgroundColor: AppTheme.error,
           duration: const Duration(seconds: 3),
-          behavior: SnackBarBehavior.floating,
-          margin: const EdgeInsets.all(16),
         ),
       );
     }
@@ -120,124 +126,117 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0D0D1A), // Konsisten dengan tema gelap
+      backgroundColor: AppTheme.bgLightGrey,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: BackButton(color: AppTheme.textDark),
+      ),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
             physics: const ClampingScrollPhysics(),
             child: Padding(
-              padding: const EdgeInsets.all(24.0),
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppTheme.spacing24,
+                vertical: AppTheme.spacing16,
+              ),
               child: Form(
                 key: _formKey,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Logo
-                    const Center(
-                      child: Icon(
-                        Icons.fitbit_rounded,
-                        size: 60,
-                        color: Colors.limeAccent,
+                    // ── Logo ──────────────────────────────────────────
+                    Center(
+                      child: Container(
+                        width: 88,
+                        height: 88,
+                        clipBehavior: Clip.antiAlias,
+                        decoration: BoxDecoration(
+                          color: AppTheme.bgWhite,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppTheme.primaryBlue.withValues(alpha: 0.15),
+                              blurRadius: 24,
+                              offset: const Offset(0, 8),
+                            ),
+                          ],
+                        ),
+                        child: Image.asset(
+                          'assets/images/logos.png',
+                          fit: BoxFit.cover,
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: AppTheme.spacing24),
 
-                    // Title
+                    // ── Title ──────────────────────────────────────────
                     Text(
-                      'BiTri AI',
-                      style: Theme.of(context).textTheme.displayLarge?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
+                      'Create Account',
+                      style: Theme.of(context).textTheme.displayMedium?.copyWith(
+                        color: AppTheme.primaryBlue,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: AppTheme.spacing8),
                     Text(
-                      'Your Personal Training Assistant',
-                      style: Theme.of(
-                        context,
-                      ).textTheme.bodyLarge?.copyWith(color: Colors.white70),
+                      'Join BiTri AI and start your fitness journey',
+                      style: Theme.of(context).textTheme.bodyMedium,
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Train smarter with AI-based movement evaluation',
-                      style: Theme.of(
-                        context,
-                      ).textTheme.bodyMedium?.copyWith(color: Colors.white54),
-                    ),
-                    const SizedBox(height: 40),
+                    const SizedBox(height: AppTheme.spacing32),
 
-                    // Name Field
+                    // ── Name Field ────────────────────────────────────
                     TextFormField(
                       controller: _nameController,
-                      decoration: InputDecoration(
-                        hintText: 'Name',
-                        hintStyle: const TextStyle(color: Colors.white54),
-                        prefixIcon: const Icon(
-                          Icons.people_outlined,
-                          color: Colors.grey,
-                        ),
-                        filled: true,
-                        fillColor: Colors.white.withValues(alpha: 0.05),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: BorderSide.none,
-                        ),
+                      decoration: const InputDecoration(
+                        hintText: 'Full Name',
+                        prefixIcon: Icon(Icons.person_outline),
                       ),
-                      style: const TextStyle(color: Colors.white),
+                      style: const TextStyle(color: AppTheme.textDark),
                       keyboardType: TextInputType.name,
                       textInputAction: TextInputAction.next,
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: AppTheme.spacing16),
 
-                    // Email Field
+                    // ── Email Field ───────────────────────────────────
                     TextFormField(
                       controller: _emailController,
-                      decoration: InputDecoration(
-                        hintText: 'Email',
-                        hintStyle: const TextStyle(color: Colors.white54),
-                        prefixIcon: const Icon(
-                          Icons.email_outlined,
-                          color: Colors.grey,
-                        ),
-                        filled: true,
-                        fillColor: Colors.white.withValues(alpha: 0.05),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: BorderSide.none,
-                        ),
+                      decoration: const InputDecoration(
+                        hintText: 'Email address',
+                        prefixIcon: Icon(Icons.email_outlined),
                       ),
-                      style: const TextStyle(color: Colors.white),
+                      style: const TextStyle(color: AppTheme.textDark),
                       keyboardType: TextInputType.emailAddress,
                       textInputAction: TextInputAction.next,
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: AppTheme.spacing16),
 
-                    // Password Field
+                    // ── Password Field ────────────────────────────────
                     TextFormField(
                       controller: _passwordController,
                       decoration: InputDecoration(
                         hintText: 'Password',
-                        hintStyle: const TextStyle(color: Colors.white54),
-                        prefixIcon: const Icon(
-                          Icons.lock_outline,
-                          color: Colors.grey,
-                        ),
-                        filled: true,
-                        fillColor: Colors.white.withValues(alpha: 0.05),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: BorderSide.none,
+                        prefixIcon: const Icon(Icons.lock_outline),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _obscurePassword
+                                ? Icons.visibility_off_outlined
+                                : Icons.visibility_outlined,
+                            size: AppTheme.iconMd,
+                          ),
+                          onPressed: () => setState(
+                              () => _obscurePassword = !_obscurePassword),
                         ),
                       ),
-                      style: const TextStyle(color: Colors.white),
-                      obscureText: true,
+                      style: const TextStyle(color: AppTheme.textDark),
+                      obscureText: _obscurePassword,
                       textInputAction: TextInputAction.done,
                       onFieldSubmitted: (_) => _handleRegister(),
                     ),
-                    const SizedBox(height: 32),
+                    const SizedBox(height: AppTheme.spacing32),
 
-                    // Register Button
+                    // ── Register Button ────────────────────────────────
                     Consumer<AuthProvider>(
                       builder: (context, authProvider, child) {
                         if (authProvider.isLoading) {
@@ -245,12 +244,12 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                             child: Column(
                               children: [
                                 CircularProgressIndicator(
-                                  color: Colors.blueAccent,
+                                  color: AppTheme.primaryBlue,
                                 ),
-                                SizedBox(height: 8),
+                                SizedBox(height: AppTheme.spacing8),
                                 Text(
-                                  'Membuat akun...',
-                                  style: TextStyle(color: Colors.grey),
+                                  'Creating account...',
+                                  style: TextStyle(color: AppTheme.textGrey),
                                 ),
                               ],
                             ),
@@ -260,35 +259,20 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                           width: double.infinity,
                           child: ElevatedButton(
                             onPressed: _handleRegister,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.blueAccent,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 18),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              textStyle: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            child: const Text('Register'),
+                            child: const Text('Create Account'),
                           ),
                         );
                       },
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: AppTheme.spacing24),
 
-                    // Login Link
+                    // ── Login Link ────────────────────────────────────
                     Center(
                       child: TextButton(
                         onPressed: () {
                           Navigator.pop(context);
                         },
-                        child: const Text(
-                          'Already Have an Account? Login Here',
-                          style: TextStyle(color: Colors.blueGrey),
-                        ),
+                        child: const Text('Already have an account? Login'),
                       ),
                     ),
                   ],

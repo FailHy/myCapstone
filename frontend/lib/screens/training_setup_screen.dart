@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../core/models/exercise_type.dart';
+import '../theme.dart';
 import 'training_screen.dart';
 
 class TrainingSetupScreen extends StatefulWidget {
@@ -23,141 +24,214 @@ class _TrainingSetupScreenState extends State<TrainingSetupScreen> {
     super.dispose();
   }
 
+  List<Color> get _gradientColors {
+    return widget.exerciseType == ExerciseType.biceps
+        ? [AppTheme.primaryBlue, const Color(0xFF0369A1)]
+        : [AppTheme.secondaryBlue, const Color(0xFF1D4ED8)];
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0D0D1A),
+      backgroundColor: AppTheme.bgLightGrey,
       appBar: AppBar(
-        title: const Text(
-          'Setup Latihan',
-          style: TextStyle(color: Colors.white),
-        ),
-        backgroundColor: const Color(0xFF0D0D1A),
-        iconTheme: const IconThemeData(color: Colors.white),
+        title: const Text('Setup Training'),
+        backgroundColor: Colors.transparent,
         elevation: 0,
+        iconTheme: const IconThemeData(color: AppTheme.textDark),
       ),
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(24.0),
+          padding: const EdgeInsets.all(AppTheme.spacing24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const SizedBox(height: 20),
-
-              // Tipe Latihan yang dipilih
+              // ── Exercise Header Card ────────────────────────────────
               Container(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.all(AppTheme.spacing24),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.05),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.white12),
+                  gradient: LinearGradient(
+                    colors: _gradientColors,
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(AppTheme.radius20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: _gradientColors.first.withValues(alpha: 0.3),
+                      blurRadius: 16,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
                 ),
-                child: Column(
+                child: Row(
                   children: [
-                    const Icon(
-                      Icons.fitness_center,
-                      size: 48,
-                      color: Colors.blueAccent,
+                    Container(
+                      padding: const EdgeInsets.all(AppTheme.spacing16),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        borderRadius:
+                            BorderRadius.circular(AppTheme.radius16),
+                      ),
+                      child: Image.asset(
+                        widget.exerciseType.assetIcon,
+                        width: 48,
+                        height: 48,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, __, ___) => const Icon(
+                          Icons.fitness_center_rounded,
+                          color: Colors.white,
+                          size: 36,
+                        ),
+                      ),
                     ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Latihan Terpilih',
-                      style: TextStyle(color: Colors.white54, fontSize: 14),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      widget.exerciseType.displayName,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
+                    const SizedBox(width: AppTheme.spacing20),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Selected Exercise',
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 13,
+                            ),
+                          ),
+                          const SizedBox(height: AppTheme.spacing4),
+                          Text(
+                            widget.exerciseType.displayName,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: AppTheme.spacing8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: AppTheme.spacing12,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.2),
+                              borderRadius:
+                                  BorderRadius.circular(AppTheme.radius8),
+                            ),
+                            child: const Text(
+                              'AI Powered',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
               ),
 
-              const SizedBox(height: 48),
+              const SizedBox(height: AppTheme.spacing32),
 
-              // Pilihan Target Reps
-              const Text(
-                'Target Repetisi:',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
+              // ── Target Reps Label ───────────────────────────────────
+              Text(
+                'Target Repetitions',
+                style: Theme.of(context).textTheme.titleMedium,
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: AppTheme.spacing4),
+              Text(
+                'Choose how many reps you want to complete',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: AppTheme.spacing16),
 
+              // ── Chip Grid ──────────────────────────────────────────
               Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children:
-                    _repsOptions.map((reps) {
-                      final isSelected = _targetReps == reps;
-                      return ChoiceChip(
-                        label: Text(
-                          '$reps Reps',
-                          style: TextStyle(
-                            color:
-                                isSelected && !_isCustomReps
-                                    ? Colors.white
-                                    : Colors.indigo.shade300,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        selected: isSelected && !_isCustomReps,
-                        selectedColor: Colors.blueAccent,
-                        backgroundColor: Colors.white.withValues(alpha: 0.1),
-                        onSelected: (selected) {
-                          if (selected) {
-                            setState(() {
-                              _targetReps = reps;
-                              _isCustomReps = false;
-                            });
-                          }
-                        },
-                      );
-                    }).toList()
-                      ..add(
-                        ChoiceChip(
-                          label: Text(
-                            'Custom',
-                            style: TextStyle(
-                              color: _isCustomReps ? Colors.white : Colors.indigo.shade300,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          selected: _isCustomReps,
-                          selectedColor: Colors.blueAccent,
-                          backgroundColor: Colors.white.withValues(alpha: 0.1),
-                          onSelected: (selected) {
-                            setState(() {
-                              _isCustomReps = true;
-                            });
-                          },
+                spacing: AppTheme.spacing12,
+                runSpacing: AppTheme.spacing12,
+                children: _repsOptions.map((reps) {
+                  final isSelected = _targetReps == reps && !_isCustomReps;
+                  return ChoiceChip(
+                    label: Text(
+                      '$reps Reps',
+                      style: TextStyle(
+                        color: isSelected
+                            ? AppTheme.textLight
+                            : AppTheme.primaryBlue,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    selected: isSelected,
+                    selectedColor: AppTheme.primaryBlue,
+                    backgroundColor: AppTheme.bgSoftBlue,
+                    side: BorderSide(
+                      color: isSelected
+                          ? Colors.transparent
+                          : AppTheme.primaryBlue.withValues(alpha: 0.4),
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppTheme.radius12),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppTheme.spacing16,
+                      vertical: AppTheme.spacing8,
+                    ),
+                    onSelected: (selected) {
+                      if (selected) {
+                        setState(() {
+                          _targetReps = reps;
+                          _isCustomReps = false;
+                        });
+                      }
+                    },
+                  );
+                }).toList()
+                  ..add(
+                    ChoiceChip(
+                      label: Text(
+                        'Custom',
+                        style: TextStyle(
+                          color: _isCustomReps
+                              ? AppTheme.textLight
+                              : AppTheme.primaryBlue,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
+                      selected: _isCustomReps,
+                      selectedColor: AppTheme.primaryBlue,
+                      backgroundColor: AppTheme.bgSoftBlue,
+                      side: BorderSide(
+                        color: _isCustomReps
+                            ? Colors.transparent
+                            : AppTheme.primaryBlue.withValues(alpha: 0.4),
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppTheme.radius12),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppTheme.spacing16,
+                        vertical: AppTheme.spacing8,
+                      ),
+                      onSelected: (selected) {
+                        setState(() {
+                          _isCustomReps = true;
+                        });
+                      },
+                    ),
+                  ),
               ),
 
               if (_isCustomReps) ...[
-                const SizedBox(height: 16),
+                const SizedBox(height: AppTheme.spacing16),
                 TextField(
                   controller: _customRepsController,
                   keyboardType: TextInputType.number,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    labelText: 'Masukkan Target Repetisi (1-100)',
-                    labelStyle: const TextStyle(color: Colors.white54),
-                    enabledBorder: OutlineInputBorder(
-                      borderSide: const BorderSide(color: Colors.white24),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderSide: const BorderSide(color: Colors.blueAccent),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                  style: const TextStyle(color: AppTheme.textDark),
+                  decoration: const InputDecoration(
+                    labelText: 'Enter Target Reps (1–100)',
+                    prefixIcon: Icon(Icons.edit_outlined),
                   ),
                   onChanged: (value) {
                     final intValue = int.tryParse(value);
@@ -170,49 +244,42 @@ class _TrainingSetupScreenState extends State<TrainingSetupScreen> {
 
               const Spacer(),
 
-              // Tombol Mulai
+              // ── Start Button ───────────────────────────────────────
               ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blueAccent,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                ),
                 onPressed: () {
                   if (_isCustomReps) {
                     final val = int.tryParse(_customRepsController.text);
                     if (val == null || val < 1 || val > 100) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                          content: Text('Masukkan angka valid antara 1 hingga 100'),
-                          backgroundColor: Colors.redAccent,
+                          content: Text(
+                            'Please enter a valid number between 1 and 100',
+                          ),
+                          backgroundColor: AppTheme.error,
                         ),
                       );
                       return;
                     }
                     _targetReps = val;
                   }
-                  
+
                   Navigator.pushReplacement(
                     context,
                     MaterialPageRoute(
-                      builder:
-                          (context) => TrainingScreen(
-                            exerciseType: widget.exerciseType,
-                            targetReps: _targetReps,
-                          ),
+                      builder: (context) => TrainingScreen(
+                        exerciseType: widget.exerciseType,
+                        targetReps: _targetReps,
+                      ),
                     ),
                   );
                 },
-                icon: const Icon(Icons.play_arrow_rounded, size: 28),
-                label: const Text(
-                  'Mulai Latihan',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                icon: const Icon(Icons.play_arrow_rounded, size: 26),
+                label: const Text('Start Training'),
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, AppTheme.buttonHeight),
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: AppTheme.spacing16),
             ],
           ),
         ),

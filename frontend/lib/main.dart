@@ -5,6 +5,7 @@ import 'screens/login_screen.dart';
 import 'screens/main_navigation.dart';
 import 'screens/registration_screen.dart';
 import 'features/auth/providers/auth_provider.dart';
+import 'theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -28,6 +29,7 @@ class BiTriApp extends StatelessWidget {
     return MaterialApp(
       title: 'BiTri AI',
       debugShowCheckedModeBanner: false,
+      theme: AppTheme.lightTheme,
       // Daftarkan route untuk menghindari error
       routes: {
         '/main': (context) => const MainNavigation(),

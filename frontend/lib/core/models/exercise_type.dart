@@ -1,9 +1,7 @@
 enum ExerciseType {
   biceps,
-  triceps,
-}
+  triceps;
 
-extension ExerciseTypeExt on ExerciseType {
   String get displayName {
     switch (this) {
       case ExerciseType.biceps:
@@ -14,7 +12,15 @@ extension ExerciseTypeExt on ExerciseType {
   }
 
   String get backendCode {
-    // Enum name automatically matches backend requirements ("biceps", "triceps")
     return name;
+  }
+
+  String get assetIcon {
+    switch (this) {
+      case ExerciseType.biceps:
+        return 'assets/images/Biceps icon.png';
+      case ExerciseType.triceps:
+        return 'assets/images/Triceps icon.png';
+    }
   }
 }

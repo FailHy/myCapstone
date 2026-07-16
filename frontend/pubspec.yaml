@@ -53,6 +53,7 @@ dependencies:
   google_mlkit_pose_detection: ^0.14.1
   http: ^1.6.0
   audioplayers: ^6.6.0
+  google_fonts: ^6.3.2
 
 dev_dependencies:
   flutter_test:
@@ -64,6 +65,16 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.14.3
+
+flutter_launcher_icons:
+  android: "ic_launcher"
+  ios: true
+  image_path: "assets/images/logos.png"
+  min_sdk_android: 21
+  web:
+    generate: true
+    image_path: "assets/images/logos.png"
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -78,6 +89,10 @@ flutter:
 
   assets:
     - assets/ding.mp3
+    - assets/images/
+    - assets/images/logos.png
+    - assets/images/Biceps icon.png
+    - assets/images/Triceps icon.png
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

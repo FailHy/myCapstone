@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../features/auth/providers/auth_provider.dart';
 import '../core/api/api_client.dart';
+import '../theme.dart';
+import '../widgets/custom_widgets.dart';
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
@@ -50,7 +52,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
       } else {
         if (mounted) {
           setState(() {
-            _error = 'Gagal memuat riwayat (${response.statusCode})';
+            _error = 'Failed to load history (${response.statusCode})';
             _isLoading = false;
           });
         }
@@ -58,7 +60,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _error = 'Koneksi gagal: $e';
+          _error = 'Connection failed: $e';
           _isLoading = false;
         });
       }
@@ -68,18 +70,18 @@ class _HistoryScreenState extends State<HistoryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0D0D1A),
+      backgroundColor: AppTheme.bgLightGrey,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0D0D1A),
+        backgroundColor: Colors.transparent,
         elevation: 0,
-        title: const Text(
-          'Riwayat Latihan',
-          style: TextStyle(color: Colors.white),
+        title: Text(
+          'Training History',
+          style: Theme.of(context).textTheme.titleLarge,
         ),
-        iconTheme: const IconThemeData(color: Colors.white),
+        iconTheme: const IconThemeData(color: AppTheme.textDark),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.white70),
+            icon: const Icon(Icons.refresh_rounded, color: AppTheme.textDark),
             onPressed: () {
               setState(() {
                 _isLoading = true;
@@ -88,6 +90,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
               _fetchHistory();
             },
           ),
+          const SizedBox(width: AppTheme.spacing8),
         ],
       ),
       body: _buildBody(),
@@ -97,65 +100,144 @@ class _HistoryScreenState extends State<HistoryScreen> {
   Widget _buildBody() {
     if (_isLoading) {
       return const Center(
-        child: CircularProgressIndicator(color: Colors.indigoAccent),
+        child: CircularProgressIndicator(color: AppTheme.primaryBlue),
       );
     }
 
     if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline, color: Colors.redAccent, size: 48),
-              const SizedBox(height: 16),
-              Text(_error!,
-                  style: const TextStyle(color: Colors.white70),
-                  textAlign: TextAlign.center),
-              const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: _fetchHistory,
-                child: const Text('Coba Lagi'),
-              ),
-            ],
-          ),
-        ),
+      return EmptyStateWidget(
+        icon: Icons.cloud_off_rounded,
+        title: 'Unable to Load History',
+        subtitle: _error!,
+        buttonLabel: 'Try Again',
+        onButton: _fetchHistory,
       );
     }
 
     if (_sessions.isEmpty) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.fitness_center_outlined, color: Colors.white24, size: 64),
-            SizedBox(height: 16),
-            Text(
-              'Belum ada riwayat latihan.',
-              style: TextStyle(color: Colors.white38, fontSize: 16),
-            ),
-            SizedBox(height: 8),
-            Text(
-              'Mulai latihan pertama Anda!',
-              style: TextStyle(color: Colors.white24, fontSize: 13),
-            ),
-          ],
-        ),
+      return const EmptyStateWidget(
+        icon: Icons.fitness_center_outlined,
+        title: 'No Training History',
+        subtitle: 'Complete your first session to see it here.',
       );
     }
 
+    // Group sessions by date
+    final grouped = _groupByDate(_sessions);
+
     return RefreshIndicator(
       onRefresh: _fetchHistory,
-      color: Colors.indigoAccent,
+      color: AppTheme.primaryBlue,
       child: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: _sessions.length,
-        itemBuilder: (context, index) => _SessionCard(session: _sessions[index]),
+        padding: const EdgeInsets.all(AppTheme.spacing16),
+        itemCount: grouped.length,
+        itemBuilder: (context, index) {
+          final date = grouped.keys.elementAt(index);
+          final items = grouped[date]!;
+          return _buildDateGroup(context, date, items);
+        },
       ),
     );
   }
+
+  Map<String, List<Map<String, dynamic>>> _groupByDate(
+    List<Map<String, dynamic>> sessions,
+  ) {
+    final map = <String, List<Map<String, dynamic>>>{};
+    for (final s in sessions) {
+      final raw = s['created_at'] as String?;
+      final key = raw != null ? raw.split('T')[0] : 'Unknown';
+      map.putIfAbsent(key, () => []).add(s);
+    }
+    return map;
+  }
+
+  Widget _buildDateGroup(
+    BuildContext context,
+    String dateKey,
+    List<Map<String, dynamic>> items,
+  ) {
+    String displayDate = dateKey;
+    try {
+      final dt = DateTime.parse(dateKey);
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final yesterday = today.subtract(const Duration(days: 1));
+      final d = DateTime(dt.year, dt.month, dt.day);
+      if (d == today) {
+        displayDate = 'Today';
+      } else if (d == yesterday) {
+        displayDate = 'Yesterday';
+      } else {
+        displayDate = '${dt.day} ${_monthName(dt.month)} ${dt.year}';
+      }
+    } catch (_) {}
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(
+            top: AppTheme.spacing8,
+            bottom: AppTheme.spacing12,
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 4,
+                height: 16,
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryBlue,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(width: AppTheme.spacing8),
+              Text(
+                displayDate,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: AppTheme.textDark,
+                ),
+              ),
+              const SizedBox(width: AppTheme.spacing8),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppTheme.spacing8,
+                  vertical: 2,
+                ),
+                decoration: BoxDecoration(
+                  color: AppTheme.bgSoftBlue,
+                  borderRadius: BorderRadius.circular(AppTheme.radius8),
+                ),
+                child: Text(
+                  '${items.length} session${items.length > 1 ? 's' : ''}',
+                  style: const TextStyle(
+                    color: AppTheme.primaryBlue,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        ...items.map((s) => _SessionCard(session: s)),
+        const SizedBox(height: AppTheme.spacing12),
+      ],
+    );
+  }
+
+  String _monthName(int month) {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    return months[month - 1];
+  }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SESSION CARD
+// ─────────────────────────────────────────────────────────────────────────────
 
 class _SessionCard extends StatelessWidget {
   final Map<String, dynamic> session;
@@ -163,116 +245,116 @@ class _SessionCard extends StatelessWidget {
   const _SessionCard({required this.session});
 
   Color _gradeColor(double accuracy) {
-    if (accuracy >= 85) return Colors.greenAccent;
-    if (accuracy >= 65) return Colors.lightBlueAccent;
-    if (accuracy >= 45) return Colors.orangeAccent;
-    return Colors.redAccent;
+    if (accuracy >= 85) return AppTheme.success;
+    if (accuracy >= 65) return AppTheme.primaryBlue;
+    if (accuracy >= 45) return AppTheme.warning;
+    return AppTheme.error;
   }
 
-  String _formatDate(String? iso) {
-    if (iso == null) return '-';
+  String _formatTime(String? iso) {
+    if (iso == null) return '';
     try {
       final dt = DateTime.parse(iso).toLocal();
-      return '${dt.day}/${dt.month}/${dt.year}  ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+      return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
     } catch (_) {
-      return iso;
+      return '';
     }
+  }
+
+  String _exerciseAsset(String type) {
+    return type.toLowerCase().contains('bicep')
+        ? 'assets/images/Biceps icon.png'
+        : 'assets/images/Triceps icon.png';
   }
 
   @override
   Widget build(BuildContext context) {
-    final double accuracy = (session['accuracy'] as num?)?.toDouble() ?? 0.0;
-    final int totalReps   = (session['total_reps'] as num?)?.toInt() ?? 0;
+    final double accuracy =
+        (session['accuracy'] as num?)?.toDouble() ?? 0.0;
+    final int totalReps = (session['total_reps'] as num?)?.toInt() ?? 0;
     final int correctReps = (session['correct_reps'] as num?)?.toInt() ?? 0;
-    final String type     = session['exercise_type'] ?? '-';
-    final color           = _gradeColor(accuracy);
+    final String type = session['exercise_type'] ?? '-';
+    final color = _gradeColor(accuracy);
+    final time = _formatTime(session['created_at'] as String?);
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        children: [
-          // Accuracy circle
-          SizedBox(
-            width: 56,
-            height: 56,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                CircularProgressIndicator(
-                  value: accuracy / 100,
-                  strokeWidth: 5,
-                  backgroundColor: Colors.white10,
-                  valueColor: AlwaysStoppedAnimation<Color>(color),
-                ),
-                Text(
-                  '${accuracy.toStringAsFixed(0)}%',
-                  style: TextStyle(
+      margin: const EdgeInsets.only(bottom: AppTheme.spacing12),
+      decoration: AppTheme.cardDecoration(shadowColor: color),
+      child: Padding(
+        padding: const EdgeInsets.all(AppTheme.spacing16),
+        child: Row(
+          children: [
+            // Exercise icon container
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(AppTheme.radius12),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(6.0),
+                child: Image.asset(
+                  _exerciseAsset(type),
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, __, ___) => Icon(
+                    Icons.fitness_center_rounded,
                     color: color,
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
+                    size: 24,
                   ),
                 ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 16),
-
-          // Detail
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  type.toUpperCase(),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '$totalReps reps · $correctReps benar · ${totalReps - correctReps} salah',
-                  style: const TextStyle(color: Colors.white54, fontSize: 12),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  _formatDate(session['created_at'] as String?),
-                  style: const TextStyle(color: Colors.white30, fontSize: 11),
-                ),
-              ],
-            ),
-          ),
-
-          // Grade badge
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              accuracy >= 85
-                  ? 'Hebat'
-                  : accuracy >= 65
-                      ? 'Baik'
-                      : accuracy >= 45
-                          ? 'Cukup'
-                          : 'Kurang',
-              style: TextStyle(
-                color: color,
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
               ),
             ),
-          ),
-        ],
+            const SizedBox(width: AppTheme.spacing16),
+
+            // Details
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          type.toUpperCase(),
+                          style: Theme.of(context).textTheme.titleMedium,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (time.isNotEmpty)
+                        Text(
+                          time,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: AppTheme.spacing4),
+                  Text(
+                    '$totalReps reps  ·  $correctReps correct  ·  ${totalReps - correctReps} incorrect',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: AppTheme.textGrey,
+                    ),
+                  ),
+                  const SizedBox(height: AppTheme.spacing8),
+                  // Mini progress bar
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: accuracy / 100,
+                      minHeight: 4,
+                      backgroundColor: color.withValues(alpha: 0.1),
+                      valueColor: AlwaysStoppedAnimation<Color>(color),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: AppTheme.spacing12),
+
+            // Grade badge
+            GradeBadge(accuracy: accuracy),
+          ],
+        ),
       ),
     );
   }

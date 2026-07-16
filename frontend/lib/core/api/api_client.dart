@@ -11,7 +11,7 @@ class ApiClient {
   // ===========================================================================
   // KONFIGURASI IP - Ganti sesuai network Anda
   // ===========================================================================
-  static const String physicalDeviceIP = '10.20.27.224';
+  static const String physicalDeviceIP = '10.103.136.195';
 
   static String get _baseUrl {
     if (kIsWeb) return 'http://127.0.0.1:8000';

@@ -12,6 +12,7 @@ import '../core/services/logging_service.dart';
 import '../core/api/training_service.dart';
 import '../features/auth/providers/auth_provider.dart';
 import '../core/models/exercise_type.dart';
+import '../theme.dart';
 import 'result_screen.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -53,9 +54,8 @@ class _TrainingScreenState extends State<TrainingScreen> {
   String _currentState = '-';
   String _connectionStatus = 'Belum terhubung';
   int _reps = 0;
-  List<Pose> _detectedPoses = [];
   int _countdown = 3;
-  bool _isCountingDown = false;
+  final List<RepetitionDetail> _repHistory = [];
 
   // ── Audio ─────────────────────────────────────────────────────────
   late AudioPlayer _audioPlayer;
@@ -119,6 +119,15 @@ class _TrainingScreenState extends State<TrainingScreen> {
               _audioPlayer.play(AssetSource('ding.mp3'));
             }
             _reps = newReps;
+
+            _repHistory.add(
+              RepetitionDetail(
+                repNumber: newReps,
+                status: (result['smoothed_prediction'] ?? result['prediction'] ?? 'unknown').toString(),
+                confidence: (result['confidence'] as num?)?.toDouble() ?? 1.0,
+                feedbackText: (result['feedback'] ?? '').toString(),
+              ),
+            );
           }
 
           // Good/Bad Form Indicator sederhana
@@ -251,8 +260,8 @@ class _TrainingScreenState extends State<TrainingScreen> {
 
     if (!mounted) return;
     setState(() {
+      _repHistory.clear();
       _isEvaluationStarted = true;
-      _isCountingDown = true;
       _countdown = 3;
       _currentFeedback = 'Bersiap... $_countdown';
       _connectionStatus = 'Terhubung ✓';
@@ -272,7 +281,6 @@ class _TrainingScreenState extends State<TrainingScreen> {
           _currentFeedback = 'Bersiap... $_countdown';
         } else {
           _currentFeedback = 'Mulai!';
-          _isCountingDown = false;
         }
       });
     }
@@ -321,10 +329,8 @@ class _TrainingScreenState extends State<TrainingScreen> {
     if (!mounted) return;
     setState(() {
       _isEvaluationStarted = false;
-      _isCountingDown = false;
       _currentFeedback = 'Selesai';
       _connectionStatus = '';
-      _detectedPoses = [];
     });
 
     // [FIX B5-03] Navigasi ke ResultScreen dengan data nyata
@@ -334,12 +340,32 @@ class _TrainingScreenState extends State<TrainingScreen> {
       final errorDist =
           backendErrorDist?.map((k, v) => MapEntry(k, v as int)) ?? {};
 
+      List<RepetitionDetail> finalRepDetails = [];
+      if (sessionResult['rep_results'] is List) {
+        for (final item in (sessionResult['rep_results'] as List)) {
+          if (item is Map) {
+            finalRepDetails.add(
+              RepetitionDetail(
+                repNumber: (item['rep_number'] as num?)?.toInt() ?? finalRepDetails.length + 1,
+                status: (item['smoothed_prediction'] ?? item['prediction'] ?? 'unknown').toString(),
+                confidence: (item['confidence'] as num?)?.toDouble() ?? 1.0,
+                feedbackText: (item['feedback_text'] ?? item['feedback'] ?? '').toString(),
+              ),
+            );
+          }
+        }
+      }
+      if (finalRepDetails.isEmpty) {
+        finalRepDetails = List.from(_repHistory);
+      }
+
       final result = TrainingResult(
         exerciseType: widget.exerciseType,
         totalReps: (sessionResult['total_reps'] as num?)?.toInt() ?? _reps,
         correctReps: (sessionResult['correct_reps'] as num?)?.toInt() ?? 0,
         accuracy: (sessionResult['accuracy'] as num?)?.toDouble() ?? 0.0,
         errorDistribution: errorDist,
+        repDetails: finalRepDetails,
       );
       Navigator.push(
         context,
@@ -391,7 +417,6 @@ class _TrainingScreenState extends State<TrainingScreen> {
       // ── Update stats UI ──────────────────────────────────────────
       if (mounted) {
         setState(() {
-          _detectedPoses = _poseService.lastPoses; // ← isi untuk PosePainter
           if (landmarks != null && landmarks.isNotEmpty) {
             _currentState = 'Pose Terdeteksi! (${landmarks.length} pts)';
           } else {
@@ -504,12 +529,33 @@ class _TrainingScreenState extends State<TrainingScreen> {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        title: Text(
-          '${widget.exerciseType.displayName.toUpperCase()} ($_reps/${widget.targetReps})',
-          style: const TextStyle(color: Colors.white),
-        ),
         backgroundColor: Colors.black,
+        elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              widget.exerciseType.displayName.toUpperCase(),
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+                letterSpacing: 1,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              '$_reps / ${widget.targetReps} reps',
+              style: const TextStyle(
+                color: AppTheme.accentLime,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ),
       ),
       body: SafeArea(
         child: Column(
@@ -525,9 +571,12 @@ class _TrainingScreenState extends State<TrainingScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircularProgressIndicator(color: Colors.blueAccent),
-            SizedBox(height: 16),
-            Text('Membuka Kamera...', style: TextStyle(color: Colors.white)),
+            CircularProgressIndicator(color: AppTheme.primaryBlue),
+            SizedBox(height: AppTheme.spacing16),
+            Text(
+              'Initializing Camera...',
+              style: TextStyle(color: Colors.white70, fontSize: 14),
+            ),
           ],
         ),
       );
@@ -537,16 +586,6 @@ class _TrainingScreenState extends State<TrainingScreen> {
       fit: StackFit.expand,
       children: [
         CameraPreview(_controller!),
-
-        // Pose overlay
-        if (_detectedPoses.isNotEmpty)
-          CustomPaint(
-            painter: PosePainter(
-              _detectedPoses,
-              _controller!.value.previewSize!,
-              InputImageRotation.rotation270deg,
-            ),
-          ),
 
         // FPS Monitor overlay (kiri atas)
         Positioned(
@@ -580,46 +619,80 @@ class _TrainingScreenState extends State<TrainingScreen> {
   }
 
   Widget _buildControlPanel() {
+    final panelBg = const Color(0xFF0D1117); // Very dark, matches camera feel
     return Container(
-      color: Colors.white,
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.redAccent,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            onPressed: () async {
-              await _stopEvaluation();
-              if (mounted && Navigator.canPop(context)) Navigator.pop(context);
-            },
-            icon: const Icon(Icons.stop_circle_outlined),
-            label: const Text('Selesai', style: TextStyle(fontSize: 16)),
+      padding: const EdgeInsets.fromLTRB(
+        AppTheme.spacing24,
+        AppTheme.spacing16,
+        AppTheme.spacing24,
+        AppTheme.spacing20,
+      ),
+      decoration: BoxDecoration(
+        color: panelBg,
+        border: Border(
+          top: BorderSide(
+            color: Colors.white.withValues(alpha: 0.08),
+            width: 1,
           ),
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-              backgroundColor:
-                  _isEvaluationStarted
-                      ? Colors.grey.shade400
-                      : Colors.green.shade600,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.transparent,
+                foregroundColor: AppTheme.error,
+                elevation: 0,
+                side: const BorderSide(color: AppTheme.error, width: 1.5),
+                minimumSize: const Size(double.infinity, AppTheme.buttonHeight),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppTheme.radius16),
+                ),
+              ),
+              onPressed: () async {
+                await _stopEvaluation();
+                if (mounted && Navigator.canPop(context)) Navigator.pop(context);
+              },
+              icon: const Icon(Icons.stop_circle_outlined, size: AppTheme.iconLg),
+              label: const Text(
+                'Finish',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
-            onPressed:
-                _isCameraInitialized && !_isEvaluationStarted
-                    ? _startEvaluation
-                    : null,
-            icon: const Icon(Icons.play_circle_fill),
-            label: const Text('Mulai', style: TextStyle(fontSize: 16)),
+          ),
+          const SizedBox(width: AppTheme.spacing16),
+          Expanded(
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor:
+                    _isEvaluationStarted ? const Color(0xFF1E293B) : AppTheme.primaryBlue,
+                foregroundColor: Colors.white,
+                disabledBackgroundColor:
+                    _isEvaluationStarted
+                        ? const Color(0xFF1E293B)
+                        : AppTheme.primaryBlue.withValues(alpha: 0.6),
+                disabledForegroundColor: Colors.white70,
+                elevation: 0,
+                minimumSize: const Size(double.infinity, AppTheme.buttonHeight),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppTheme.radius16),
+                ),
+              ),
+              onPressed:
+                  _isCameraInitialized && !_isEvaluationStarted
+                      ? _startEvaluation
+                      : null,
+              icon: const Icon(Icons.play_circle_fill_rounded, size: AppTheme.iconLg),
+              label: Text(
+                _isEvaluationStarted ? 'In Progress...' : 'Start',
+                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ),
         ],
       ),
@@ -649,23 +722,28 @@ class _FpsOverlay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppTheme.spacing12,
+        vertical: AppTheme.spacing8,
+      ),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.65),
-        borderRadius: BorderRadius.circular(8),
+        color: Colors.black.withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(AppTheme.radius8),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: DefaultTextStyle(
         style: const TextStyle(
-          color: Colors.greenAccent,
-          fontSize: 11,
+          color: AppTheme.accentLime,
+          fontSize: 10,
           fontFamily: 'monospace',
+          letterSpacing: 0.5,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('CAM  ${cameraFps.toStringAsFixed(1)} fps'),
             Text('POSE ${processedFps.toStringAsFixed(1)} fps'),
-            Text('DROP ${dropped + poseDropped} frames'),
+            Text('DROP ${dropped + poseDropped}'),
             Text('INF  ${lastMs.toStringAsFixed(0)} ms'),
           ],
         ),
@@ -689,154 +767,98 @@ class _StatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Color badgeColor = Colors.indigo.withValues(alpha: 0.92);
-    if (feedback.contains('🟢')) {
-      badgeColor = Colors.green.shade700.withValues(alpha: 0.92);
-    } else if (feedback.contains('🔴')) {
-      badgeColor = Colors.red.shade700.withValues(alpha: 0.92);
+    // Determine form quality from feedback string (without emoji dependency)
+    final feedbackLower = feedback.toLowerCase();
+    final bool isGoodForm = feedbackLower.contains('good') ||
+        feedbackLower.contains('correct') ||
+        feedbackLower.contains('🟢');
+    final bool isBadForm = feedbackLower.contains('bad') ||
+        feedbackLower.contains('incorrect') ||
+        feedbackLower.contains('🔴');
+
+    Color badgeColor;
+    IconData formIcon;
+    if (isGoodForm) {
+      badgeColor = AppTheme.success.withValues(alpha: 0.92);
+      formIcon = Icons.check_circle_rounded;
+    } else if (isBadForm) {
+      badgeColor = AppTheme.error.withValues(alpha: 0.92);
+      formIcon = Icons.cancel_rounded;
+    } else {
+      badgeColor = Colors.black.withValues(alpha: 0.75);
+      formIcon = Icons.radio_button_unchecked;
     }
 
+    // Clean feedback text — remove emoji for professional display
+    final cleanFeedback = feedback
+        .replaceAll('🟢', '')
+        .replaceAll('🔴', '')
+        .trim();
+
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      margin: const EdgeInsets.symmetric(horizontal: AppTheme.spacing16),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppTheme.spacing24,
+        vertical: AppTheme.spacing16,
+      ),
       decoration: BoxDecoration(
         color: badgeColor,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(AppTheme.radius20),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          )
+        ],
       ),
-      child: Column(
+      child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            feedback.toUpperCase(),
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-            ),
-            textAlign: TextAlign.center,
-          ),
-          if (state != '-')
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Text(
-                state,
-                style: const TextStyle(color: Colors.white70, fontSize: 13),
-              ),
-            ),
-          if (reps > 0)
-            Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Text(
-                'Reps: $reps',
+          Icon(formIcon, color: Colors.white, size: AppTheme.iconLg),
+          const SizedBox(width: AppTheme.spacing12),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                cleanFeedback.toUpperCase(),
                 style: const TextStyle(
-                  color: Colors.amberAccent,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.8,
                 ),
               ),
-            ),
-          if (connection.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Text(
-                connection,
-                style: TextStyle(
-                  color:
-                      connection.contains('✓')
-                          ? Colors.greenAccent
-                          : Colors.orangeAccent,
-                  fontSize: 12,
+              if (reps > 0) ...[
+                const SizedBox(height: 4),
+                Text(
+                  'Reps: $reps',
+                  style: const TextStyle(
+                    color: AppTheme.accentLime,
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-              ),
-            ),
+              ],
+              if (connection.isNotEmpty) ...[
+                const SizedBox(height: 2),
+                Text(
+                  connection,
+                  style: TextStyle(
+                    color: connection.contains('✓')
+                        ? AppTheme.accentLime
+                        : AppTheme.warning,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ],
+          ),
         ],
       ),
     );
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// POSE PAINTER
-// ─────────────────────────────────────────────────────────────────────────────
-
-class PosePainter extends CustomPainter {
-  final List<Pose> poses;
-  final Size imageSize;
-  final InputImageRotation rotation;
-
-  const PosePainter(this.poses, this.imageSize, this.rotation);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final jointPaint =
-        Paint()
-          ..style = PaintingStyle.fill
-          ..color = Colors.greenAccent
-          ..strokeWidth = 4.0;
-
-    final bonePaint =
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..color = Colors.greenAccent.withValues(alpha: 0.6)
-          ..strokeWidth = 2.0;
-
-    // Skala — gambar landscape, layar portrait → sumbu dibalik
-    final double scaleX = size.width / imageSize.height;
-    final double scaleY = size.height / imageSize.width;
-
-    for (final pose in poses) {
-      // Gambar titik landmark
-      pose.landmarks.forEach((_, lm) {
-        if (lm.likelihood < 0.3) return; // skip titik tidak yakin
-        final offset = _toOffset(lm, size, scaleX, scaleY);
-        canvas.drawCircle(offset, 5, jointPaint);
-      });
-
-      // Gambar tulang (koneksi antar landmark)
-      _drawBones(canvas, pose, size, scaleX, scaleY, bonePaint);
-    }
-  }
-
-  Offset _toOffset(PoseLandmark lm, Size size, double sx, double sy) {
-    return Offset(
-      size.width - (lm.y * sx), // rotasi 270° untuk kamera depan
-      lm.x * sy,
-    );
-  }
-
-  void _drawBones(
-    Canvas canvas,
-    Pose pose,
-    Size size,
-    double sx,
-    double sy,
-    Paint paint,
-  ) {
-    final connections = [
-      [PoseLandmarkType.rightShoulder, PoseLandmarkType.rightElbow],
-      [PoseLandmarkType.rightElbow, PoseLandmarkType.rightWrist],
-      [PoseLandmarkType.rightShoulder, PoseLandmarkType.rightHip],
-      [PoseLandmarkType.leftShoulder, PoseLandmarkType.leftElbow],
-      [PoseLandmarkType.leftElbow, PoseLandmarkType.leftWrist],
-      [PoseLandmarkType.leftShoulder, PoseLandmarkType.leftHip],
-      [PoseLandmarkType.rightShoulder, PoseLandmarkType.leftShoulder],
-      [PoseLandmarkType.rightHip, PoseLandmarkType.leftHip],
-    ];
-
-    for (final pair in connections) {
-      final a = pose.landmarks[pair[0]];
-      final b = pose.landmarks[pair[1]];
-      if (a == null || b == null) continue;
-      if (a.likelihood < 0.3 || b.likelihood < 0.3) continue;
-      canvas.drawLine(
-        _toOffset(a, size, sx, sy),
-        _toOffset(b, size, sx, sy),
-        paint,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant PosePainter old) =>
-      old.poses != poses || old.imageSize != imageSize;
-}

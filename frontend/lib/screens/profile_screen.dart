@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import 'package:frontend/features/auth/providers/auth_provider.dart';
 import 'history_screen.dart';
 import '../core/api/api_client.dart';
+import '../theme.dart';
+import '../widgets/custom_widgets.dart';
 
 class ProfileScreen extends StatefulWidget {
   final bool isActive;
@@ -64,16 +66,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  // ── Computed Stats ─────────────────────────────────────────────────────────
+
+  int get _totalSessions => _sessions.length;
+
+  double get _avgAccuracy {
+    if (_sessions.isEmpty) return 0;
+    final total = _sessions.fold<double>(
+      0,
+      (sum, s) => sum + ((s['accuracy'] as num?)?.toDouble() ?? 0.0),
+    );
+    return total / _sessions.length;
+  }
+
+  int get _totalReps {
+    return _sessions.fold<int>(
+      0,
+      (sum, s) => sum + ((s['total_reps'] as num?)?.toInt() ?? 0),
+    );
+  }
+
+  int get _activeDays =>
+      _sessions.map((s) => s['created_at']?.split('T')[0]).toSet().length;
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0D0D1A),
+      backgroundColor: AppTheme.bgLightGrey,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: const Text(
+        title: Text(
           'Profile',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          style: Theme.of(context).textTheme.titleLarge,
         ),
         automaticallyImplyLeading: false,
       ),
@@ -85,132 +110,43 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 await context.read<AuthProvider>().fetchProfile();
                 await _fetchHistory();
               },
-              color: Colors.blueAccent,
+              color: AppTheme.primaryBlue,
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(24.0),
+                padding: const EdgeInsets.all(AppTheme.spacing24),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Center(
-                      child: Column(
-                        children: [
-                          CircleAvatar(
-                            radius: 50,
-                            backgroundColor: Colors.blueAccent,
-                            child: Text(
-                              authProvider.userName.isNotEmpty
-                                  ? authProvider.userName[0].toUpperCase()
-                                  : '?',
-                              style: const TextStyle(
-                                fontSize: 40,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            authProvider.userName.isEmpty
-                                ? 'Memuat...'
-                                : authProvider.userName,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          Text(
-                            authProvider.userEmail.isEmpty
-                                ? ''
-                                : authProvider.userEmail,
-                            style: const TextStyle(
-                              color: Colors.white54,
-                              fontSize: 14,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          if (!_isLoading && _sessions.isNotEmpty)
-                            Text(
-                              '${_sessions.map((s) => s['created_at']?.split('T')[0]).toSet().length} Days',
-                              style: const TextStyle(
-                                color: Colors.blueAccent,
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 32),
-                    const Divider(color: Colors.white24),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Training History',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    if (_isLoading)
-                      const Center(
-                        child: CircularProgressIndicator(
-                          color: Colors.blueAccent,
-                        ),
-                      )
-                    else if (_error != null)
+                    // ── Avatar & Name Section ─────────────────────────
+                    _buildProfileHeader(context, authProvider),
+                    const SizedBox(height: AppTheme.spacing24),
+
+                    // ── Stats Cards ───────────────────────────────────
+                    if (!_isLoading && _sessions.isNotEmpty) ...[
                       Text(
-                        _error!,
-                        style: const TextStyle(color: Colors.redAccent),
-                      )
-                    else if (_sessions.isEmpty)
-                      const Text(
-                        'Belum ada riwayat.',
-                        style: TextStyle(color: Colors.white54),
-                      )
-                    else
-                      Column(
-                        children: [
-                          ..._sessions
-                              .take(3)
-                              .map((session) => _buildHistoryItem(session)),
-                          if (_sessions.length > 3)
-                            TextButton(
-                              onPressed: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const HistoryScreen(),
-                                ),
-                              ),
-                              child: const Text(
-                                'Lihat Semua',
-                                style: TextStyle(color: Colors.blueAccent),
-                              ),
-                            ),
-                        ],
+                        'Training Stats',
+                        style: Theme.of(context).textTheme.titleLarge,
                       ),
-                    const SizedBox(height: 24),
-                    const Divider(color: Colors.white24),
-                    const SizedBox(height: 12),
-                    // Tombol Logout
-                    ListTile(
-                      leading: const Icon(Icons.logout, color: Colors.redAccent),
-                      title: const Text(
-                        'Logout',
-                        style: TextStyle(
-                          color: Colors.redAccent,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      trailing: const Icon(
-                        Icons.chevron_right,
-                        color: Colors.redAccent,
-                      ),
-                      onTap: () async {
-                        await authProvider.logout();
-                      },
+                      const SizedBox(height: AppTheme.spacing12),
+                      _buildStatsGrid(context),
+                      const SizedBox(height: AppTheme.spacing24),
+                    ],
+
+                    // ── Recent Activities ─────────────────────────────
+                    const SectionHeader(
+                      title: 'Recent Activities',
                     ),
+                    const SizedBox(height: AppTheme.spacing12),
+                    _buildActivitySection(context),
+                    const SizedBox(height: AppTheme.spacing24),
+
+                    // ── Divider ───────────────────────────────────────
+                    const Divider(color: AppTheme.dividerColor),
+                    const SizedBox(height: AppTheme.spacing12),
+
+                    // ── Logout ────────────────────────────────────────
+                    _buildLogoutTile(authProvider),
+                    const SizedBox(height: AppTheme.spacing16),
                   ],
                 ),
               ),
@@ -221,67 +157,401 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildHistoryItem(Map<String, dynamic> session) {
+  Widget _buildProfileHeader(
+    BuildContext context,
+    AuthProvider authProvider,
+  ) {
+    final name = authProvider.userName.isNotEmpty
+        ? authProvider.userName
+        : 'Loading...';
+    final email = authProvider.userEmail;
+    final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppTheme.spacing24),
+      decoration: AppTheme.cardDecoration(),
+      child: Column(
+        children: [
+          // Avatar with gradient background
+          Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [AppTheme.primaryBlue, AppTheme.secondaryBlue],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: AppTheme.primaryBlue.withValues(alpha: 0.3),
+                  blurRadius: 12,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Center(
+              child: Text(
+                initial,
+                style: const TextStyle(
+                  fontSize: 32,
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: AppTheme.spacing16),
+          Text(
+            name,
+            style: Theme.of(context).textTheme.headlineMedium,
+          ),
+          if (email.isNotEmpty) ...[
+            const SizedBox(height: AppTheme.spacing4),
+            Text(
+              email,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ],
+          if (!_isLoading && _sessions.isNotEmpty) ...[
+            const SizedBox(height: AppTheme.spacing12),
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppTheme.spacing16,
+                vertical: 6,
+              ),
+              decoration: BoxDecoration(
+                color: AppTheme.successLight,
+                borderRadius: BorderRadius.circular(AppTheme.radius12),
+              ),
+              child: Text(
+                '$_activeDays Days Active',
+                style: const TextStyle(
+                  color: AppTheme.success,
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatsGrid(BuildContext context) {
+    // Menggunakan Column + Row agar tidak bergantung pada childAspectRatio
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: StatCard(
+                label: 'Total Sessions',
+                value: '$_totalSessions',
+                icon: Icons.calendar_today_outlined,
+                color: AppTheme.primaryBlue,
+              ),
+            ),
+            const SizedBox(width: AppTheme.spacing12),
+            Expanded(
+              child: StatCard(
+                label: 'Avg. Accuracy',
+                value: '${_avgAccuracy.toStringAsFixed(0)}%',
+                icon: Icons.analytics_outlined,
+                color: _avgAccuracy >= 65 ? AppTheme.success : AppTheme.warning,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppTheme.spacing12),
+        Row(
+          children: [
+            Expanded(
+              child: StatCard(
+                label: 'Total Reps',
+                value: '$_totalReps',
+                icon: Icons.repeat_rounded,
+                color: AppTheme.secondaryBlue,
+              ),
+            ),
+            const SizedBox(width: AppTheme.spacing12),
+            Expanded(
+              child: StatCard(
+                label: 'Active Days',
+                value: '$_activeDays',
+                icon: Icons.local_fire_department_outlined,
+                color: AppTheme.warning,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActivitySection(BuildContext context) {
+    if (_isLoading) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(AppTheme.spacing24),
+          child: CircularProgressIndicator(color: AppTheme.primaryBlue),
+        ),
+      );
+    }
+
+    if (_error != null) {
+      return Container(
+        padding: const EdgeInsets.all(AppTheme.spacing16),
+        decoration: BoxDecoration(
+          color: AppTheme.errorLight,
+          borderRadius: BorderRadius.circular(AppTheme.radius12),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.error_outline, color: AppTheme.error, size: 20),
+            const SizedBox(width: AppTheme.spacing8),
+            Expanded(
+              child: Text(
+                _error!,
+                style: const TextStyle(color: AppTheme.error, fontSize: 13),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_sessions.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(AppTheme.spacing24),
+        decoration: AppTheme.cardDecoration(),
+        child: const Row(
+          children: [
+            Icon(Icons.fitness_center_outlined,
+                color: AppTheme.textMuted, size: 20),
+            SizedBox(width: AppTheme.spacing12),
+            Expanded(
+              child: Text(
+                'No sessions yet. Start your first training!',
+                style: TextStyle(color: AppTheme.textGrey),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        ..._sessions.take(5).map((s) => _buildHistoryItem(context, s)),
+        if (_sessions.length > 5) ...[
+          const SizedBox(height: AppTheme.spacing8),
+          _buildViewMoreButton(context),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildViewMoreButton(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const HistoryScreen()),
+        ),
+        borderRadius: BorderRadius.circular(AppTheme.radius16),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(
+            vertical: AppTheme.spacing16,
+            horizontal: AppTheme.spacing20,
+          ),
+          decoration: BoxDecoration(
+            color: AppTheme.bgSoftBlue,
+            borderRadius: BorderRadius.circular(AppTheme.radius16),
+            border: Border.all(
+              color: AppTheme.primaryBlue.withValues(alpha: 0.25),
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.history_rounded,
+                color: AppTheme.primaryBlue,
+                size: AppTheme.iconMd,
+              ),
+              const SizedBox(width: AppTheme.spacing8),
+              Flexible(
+                child: Text(
+                  'View More History (${_sessions.length - 5} more)',
+                  style: const TextStyle(
+                    color: AppTheme.primaryBlue,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: AppTheme.spacing8),
+              const Icon(
+                Icons.arrow_forward_rounded,
+                color: AppTheme.primaryBlue,
+                size: AppTheme.iconMd,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+
+  Widget _buildHistoryItem(
+    BuildContext context,
+    Map<String, dynamic> session,
+  ) {
     final accuracy = (session['accuracy'] as num?)?.toDouble() ?? 0.0;
     final totalReps = (session['total_reps'] as num?)?.toInt() ?? 0;
     final correctReps = (session['correct_reps'] as num?)?.toInt() ?? 0;
     final type = session['exercise_type'] ?? '-';
     final date = session['created_at'] as String?;
-    final color =
-        accuracy >= 85
-            ? Colors.greenAccent
-            : accuracy >= 65
-            ? Colors.lightBlueAccent
-            : Colors.orangeAccent;
+    final color = accuracy >= 85
+        ? AppTheme.success
+        : accuracy >= 65
+            ? AppTheme.warning
+            : AppTheme.error;
+
+    final exerciseAsset = type.toLowerCase().contains('bicep')
+        ? 'assets/images/Biceps icon.png'
+        : 'assets/images/Triceps icon.png';
+
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.2)),
-      ),
+      margin: const EdgeInsets.only(bottom: AppTheme.spacing8),
+      padding: const EdgeInsets.all(AppTheme.spacing16),
+      decoration: AppTheme.cardDecoration(),
       child: Row(
         children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(AppTheme.radius12),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(6.0),
+              child: Image.asset(
+                exerciseAsset,
+                fit: BoxFit.contain,
+                color: color,
+                errorBuilder: (_, __, ___) => Icon(
+                  Icons.fitness_center_rounded,
+                  color: color,
+                  size: 22,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: AppTheme.spacing12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   type.toUpperCase(),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: Theme.of(context).textTheme.titleMedium,
                 ),
+                const SizedBox(height: AppTheme.spacing4),
                 Text(
-                  '$totalReps reps · $correctReps benar',
-                  style: const TextStyle(color: Colors.white54, fontSize: 12),
+                  '$totalReps reps  ·  $correctReps correct',
+                  style: Theme.of(context).textTheme.bodySmall,
                 ),
-                if (date != null)
+                if (date != null) ...[
+                  const SizedBox(height: AppTheme.spacing4),
                   Text(
                     date.split('T')[0],
-                    style: const TextStyle(color: Colors.white30, fontSize: 11),
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: AppTheme.textMuted),
                   ),
+                ],
               ],
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              '${accuracy.toStringAsFixed(0)}%',
-              style: TextStyle(
-                color: color,
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-              ),
+          GradeBadge(accuracy: accuracy),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLogoutTile(AuthProvider authProvider) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () async {
+          await authProvider.logout();
+        },
+        borderRadius: BorderRadius.circular(AppTheme.radius16),
+        child: Container(
+          padding: const EdgeInsets.all(AppTheme.spacing16),
+          decoration: BoxDecoration(
+            color: AppTheme.errorLight,
+            borderRadius: BorderRadius.circular(AppTheme.radius16),
+            border: Border.all(
+              color: AppTheme.error.withValues(alpha: 0.2),
             ),
           ),
-        ],
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(AppTheme.spacing8),
+                decoration: BoxDecoration(
+                  color: AppTheme.error.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(AppTheme.radius8),
+                ),
+                child: const Icon(
+                  Icons.logout_rounded,
+                  color: AppTheme.error,
+                  size: AppTheme.iconMd,
+                ),
+              ),
+              const SizedBox(width: AppTheme.spacing16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Logout',
+                      style: TextStyle(
+                        color: AppTheme.error,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
+                    ),
+                    Text(
+                      'Sign out of your account',
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: AppTheme.error.withValues(alpha: 0.7)),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: AppTheme.error,
+                size: AppTheme.iconLg,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
