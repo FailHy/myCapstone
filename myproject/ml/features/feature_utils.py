@@ -389,7 +389,7 @@ def feedback_from_prediction(
             base += f" (Kecepatan: {vel:.0f}°/s)"
 
     elif label == "correct" and confidence < 0.75:
-        base += " (Keyakinan model sedang — pastikan kamera stabil)."
+        base += " (pastikan perangkat stabil)."
 
     return base
 

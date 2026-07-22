@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, EmailStr, ConfigDict
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, List
 from datetime import datetime
 
 # --- Sub-models for Landmarks ---
@@ -49,6 +49,7 @@ class SessionEndResponse(BaseModel):
     accuracy: float = 0.0
     exercise_type: str
     error_distribution: Optional[Dict[str, int]] = None
+    rep_results: Optional[List[Dict[str, Any]]] = None
 
 class HistoryItem(BaseModel):
     id: int

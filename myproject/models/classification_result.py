@@ -42,7 +42,7 @@ class ClassificationResult(Base):
     # failure_type = error label jika bukan 'correct', NULL jika correct
     failure_type          = Column(String(100), nullable=True)
     # confidence_score = nilai probabilitas dari XGBoost (0.0–1.0)
-    confidence_score      = Column(Numeric(5, 4), nullable=True)
+    confidence_score      = Column(Numeric(5, 2), nullable=True)  # DB aktual NUMERIC(5,2) — verified via information_schema
     # frame_timestamp = waktu UTC saat rep selesai
     frame_timestamp       = Column(DateTime(timezone=False), nullable=True)
     created_at            = Column(DateTime(timezone=False), server_default=func.now())

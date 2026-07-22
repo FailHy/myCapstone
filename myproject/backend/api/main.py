@@ -220,7 +220,10 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                                 db_local.commit()
                             except Exception as e:
                                 import logging
-                                logging.getLogger(__name__).error(f"Gagal menyimpan classification result: {e}")
+                                logging.getLogger(__name__).exception(
+                                    f"save_result FAILED — session={db_session_id}, "
+                                    f"prediction={result.get('prediction')}, rep={result.get('rep_count')}: {e}"
+                                )
                                 db_local.rollback()
                             finally:
                                 db_local.close()
@@ -301,11 +304,13 @@ async def end_session(request: SessionEndRequest, db: Session = Depends(get_db))
         print(f"⚠️ DB session update skipped: {e}")
 
     return SessionEndResponse(
-        status        = result["status"],
-        total_reps    = result["total_reps"],
-        correct_reps  = result["correct_reps"],
-        accuracy      = result["accuracy"],
-        exercise_type = result["exercise_type"],
+        status             = result["status"],
+        total_reps         = result["total_reps"],
+        correct_reps       = result["correct_reps"],
+        accuracy           = result["accuracy"],
+        exercise_type      = result["exercise_type"],
+        error_distribution = result.get("error_distribution"),
+        rep_results        = result.get("rep_results"),
     )
 
 

@@ -22,47 +22,79 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
-    context.read<AuthProvider>().fetchProfile();
-    _fetchHistory();
+    _initData();
   }
 
   @override
   void didUpdateWidget(ProfileScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.isActive && !oldWidget.isActive) {
-      context.read<AuthProvider>().fetchProfile();
-      _fetchHistory();
+      _initData();
     }
   }
 
+  Future<void> _initData() async {
+    final authProvider = context.read<AuthProvider>();
+    // Pastikan data profil dan userId sudah terambil terlebih dahulu dari server
+    await authProvider.fetchProfile();
+    if (!mounted) return;
+    await _fetchHistory();
+  }
+
   Future<void> _fetchHistory() async {
-    final userId = context.read<AuthProvider>().userId;
+    final authProvider = context.read<AuthProvider>();
+    String userId = authProvider.userId;
+
+    // Jika userId masih kosong, tunggu proses fetchProfile() selesai terlebih dahulu
     if (userId.isEmpty) {
-      setState(() {
-        _isLoading = false;
-        _error = 'User ID tidak ditemukan.';
-      });
+      await authProvider.fetchProfile();
+      if (!mounted) return;
+      userId = authProvider.userId;
+    }
+
+    if (userId.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _error = 'User ID tidak ditemukan.';
+        });
+      }
       return;
     }
+
+    if (mounted && (_error != null || _isLoading)) {
+      setState(() {
+        _error = null;
+      });
+    }
+
     try {
-      final response = await ApiClient().dio.get('/history/$userId');
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final response = await ApiClient().dio.get('/history/$userId?t=$timestamp');
       if (response.statusCode == 200) {
         final data = response.data as List<dynamic>;
-        setState(() {
-          _sessions = data.cast<Map<String, dynamic>>();
-          _isLoading = false;
-        });
+        if (mounted) {
+          setState(() {
+            _sessions = data.cast<Map<String, dynamic>>();
+            _isLoading = false;
+            _error = null;
+          });
+        }
       } else {
+        if (mounted) {
+          setState(() {
+            _error = 'Gagal memuat riwayat';
+            _isLoading = false;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
         setState(() {
-          _error = 'Gagal memuat riwayat';
+          _error = 'Koneksi gagal';
           _isLoading = false;
         });
       }
-    } catch (e) {
-      setState(() {
-        _error = 'Koneksi gagal';
-        _isLoading = false;
-      });
     }
   }
 

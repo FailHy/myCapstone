@@ -134,6 +134,7 @@ class SessionManager:
                 "user_id":            user_id,
                 "db_session_id":      db_session_id,
                 "error_distribution": distribution,
+                "rep_results":        service.rep_results,
             }
         return {"status": "error", "message": "not_found"}
 

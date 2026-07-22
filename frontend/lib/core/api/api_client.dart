@@ -11,14 +11,14 @@ class ApiClient {
   // ===========================================================================
   // KONFIGURASI IP - Ganti sesuai network Anda
   // ===========================================================================
-  static const String physicalDeviceIP = '10.103.136.195';
+  static const String physicalDeviceIP = '10.20.27.95';
 
   static String get _baseUrl {
     if (kIsWeb) return 'http://127.0.0.1:8000';
 
     if (Platform.isAndroid) {
       return _isEmulator()
-          ? 'http://10.0.2.2:8000'
+          ? 'http://10.20.27.95:8000'
           : 'http://$physicalDeviceIP:8000';
     }
 

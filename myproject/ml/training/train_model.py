@@ -52,7 +52,7 @@ def clean_previous_artifacts() -> None:
         if path.exists():
             for file in path.glob("*"):
                 try:
-                    if file.is_file(): file.unlink()
+                    if file.is_file(): file.unlink()    
                     elif file.is_dir(): shutil.rmtree(file)
                 except Exception as e:
                     print(f"Gagal menghapus {file}: {e}")
